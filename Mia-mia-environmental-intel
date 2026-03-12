@@ -1,0 +1,628 @@
+import { useState, useEffect, useCallback } from "react";
+
+/*
+  M.I.A. ENVIRONMENTAL INTEL — v4.0
+  Mobile-first responsive · High contrast text · Live + fallback data
+*/
+
+// ─── PALETTE (higher contrast) ───
+const P = {
+  bg: "#080810",
+  panel: "#0e0e18",
+  panel2: "#141420",
+  border: "#222236",
+  cyan: "#00d4ff",
+  cyanSoft: "#66e0ff",
+  pink: "#ff3070",
+  pinkSoft: "#ff6090",
+  green: "#2eec8a",
+  amber: "#ffcc44",
+  white: "#f2f2fa",
+  // KEY: much brighter text tiers
+  text: "#d0d0e0",       // primary body text
+  textSoft: "#a8a8c0",   // secondary info
+  label: "#8888a4",       // labels, less important
+  dim: "#5c5c78",         // least important (borders, decorative only)
+};
+
+const FONT = `'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace`;
+const FLOOD = 3.2;
+
+// ─── FALLBACK DATA ───
+function todayAt(h, m) {
+  const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString();
+}
+const FALLBACK = {
+  temp: 82, feelsLike: 87, humidity: 74, dewpoint: 73,
+  pressure: 1015.2, pressureIn: 29.98, wind: 12, gust: 18,
+  windDir: 135, visibility: 10.0, heatIdx: 87,
+  desc: "Partly Cloudy", waterLevel: 1.47,
+  hilo: [
+    { t: todayAt(6, 12), v: "2.81", type: "H" },
+    { t: todayAt(12, 38), v: "0.14", type: "L" },
+    { t: todayAt(18, 45), v: "2.64", type: "H" },
+    { t: todayAt(23, 55), v: "0.42", type: "L" },
+  ],
+  hourly: Array.from({ length: 25 }, (_, i) => ({
+    t: todayAt(i, 0),
+    v: String((1.5 + 1.3 * Math.sin((i - 3) * Math.PI / 6.2)).toFixed(2)),
+  })),
+  forecast: [
+    { name: "Tonight", temp: 78, unit: "F", short: "Partly Cloudy", wind: "SE 10 mph", precip: 20 },
+    { name: "Thursday", temp: 86, unit: "F", short: "Scattered Showers", wind: "SE 12 mph", precip: 40 },
+    { name: "Thu Night", temp: 77, unit: "F", short: "Mostly Cloudy", wind: "E 8 mph", precip: 25 },
+    { name: "Friday", temp: 88, unit: "F", short: "Sunny", wind: "SE 10 mph", precip: 10 },
+    { name: "Fri Night", temp: 76, unit: "F", short: "Clear", wind: "E 6 mph", precip: 5 },
+    { name: "Saturday", temp: 89, unit: "F", short: "Mostly Sunny", wind: "S 8 mph", precip: 15 },
+  ],
+};
+const dirLabel = d => ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"][Math.round(d / 22.5) % 16];
+
+// ─── RESPONSIVE HOOK ───
+function useWidth() {
+  const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 960);
+  useEffect(() => {
+    const h = () => setW(window.innerWidth);
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, []);
+  return w;
+}
+
+// ─── COMPONENTS ───
+function Dot({ color = P.cyan, size = 6 }) {
+  return <span style={{
+    display: "inline-block", width: size, height: size, borderRadius: "50%",
+    background: color, boxShadow: `0 0 ${size + 2}px ${color}`,
+    animation: "dot-pulse 2.5s ease-in-out infinite", flexShrink: 0,
+  }} />;
+}
+
+function SectionLabel({ children }) {
+  return (
+    <div style={{
+      fontFamily: FONT, fontSize: 10, fontWeight: 600, color: P.label,
+      letterSpacing: 3, textTransform: "uppercase", marginBottom: 12,
+      display: "flex", alignItems: "center", gap: 8,
+    }}>
+      <span style={{ width: 14, height: 1, background: P.cyan, display: "inline-block", flexShrink: 0 }} />
+      {children}
+    </div>
+  );
+}
+
+function MetricBox({ label, value, unit, sub, color = P.cyan, large = false, mobile = false }) {
+  return (
+    <div style={{
+      background: P.panel, border: `1px solid ${P.border}`, borderRadius: 6,
+      padding: large ? (mobile ? "16px" : "20px 22px") : (mobile ? "12px 14px" : "14px 16px"),
+      display: "flex", flexDirection: "column", gap: 4,
+    }}>
+      <div style={{ fontFamily: FONT, fontSize: mobile ? 8 : 9, color: P.label, letterSpacing: 2 }}>{label}</div>
+      <div style={{
+        fontFamily: FONT, fontSize: large ? (mobile ? 26 : 32) : (mobile ? 18 : 22),
+        fontWeight: 700, color, lineHeight: 1, marginTop: 2,
+      }}>
+        {value ?? <span style={{ opacity: 0.25 }}>—</span>}
+        {unit && <span style={{ fontSize: large ? (mobile ? 11 : 14) : (mobile ? 9 : 11), color: P.textSoft, fontWeight: 400, marginLeft: 3 }}>{unit}</span>}
+      </div>
+      {sub && <div style={{ fontFamily: FONT, fontSize: mobile ? 8 : 9, color: P.textSoft, lineHeight: 1.5, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function TideGauge({ level, mobile }) {
+  const maxH = 5;
+  const pct = level != null ? Math.max(0, Math.min(100, (level / maxH) * 100)) : 0;
+  const floodPct = (FLOOD / maxH) * 100;
+  const warn = level != null && level >= FLOOD * 0.75;
+  const flood = level != null && level >= FLOOD;
+  const col = flood ? P.pink : warn ? P.amber : P.cyan;
+
+  return (
+    <div style={{ display: "flex", gap: mobile ? 12 : 16, alignItems: "stretch" }}>
+      <div style={{
+        position: "relative", width: mobile ? 32 : 40, minHeight: mobile ? 150 : 180,
+        background: P.bg, borderRadius: 4, border: `1px solid ${P.border}`, overflow: "hidden",
+      }}>
+        <div style={{
+          position: "absolute", bottom: 0, left: 0, right: 0,
+          height: `${pct}%`, transition: "height 2s cubic-bezier(.25,.46,.45,.94)",
+          background: `linear-gradient(0deg, ${col}40, ${col}10)`,
+        }}>
+          <div style={{ height: 2, background: col, boxShadow: `0 0 8px ${col}` }} />
+        </div>
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: `${floodPct}%`, borderTop: `1px dashed ${P.pink}88` }} />
+        {[1, 2, 3, 4].map(v => (
+          <div key={v} style={{
+            position: "absolute", right: 4, bottom: `${(v / maxH) * 100}%`,
+            transform: "translateY(50%)", fontFamily: FONT, fontSize: 7, color: P.label,
+          }}>{v}</div>
+        ))}
+      </div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <div style={{ fontFamily: FONT, fontSize: mobile ? 34 : 44, fontWeight: 700, color: col, lineHeight: 1 }}>
+          {level != null ? level.toFixed(2) : "—.——"}
+          <span style={{ fontSize: mobile ? 13 : 16, color: P.textSoft, fontWeight: 400, marginLeft: 4 }}>ft</span>
+        </div>
+        <div style={{ fontFamily: FONT, fontSize: mobile ? 9 : 10, color: P.textSoft, marginTop: 8, lineHeight: 1.8 }}>
+          Datum MLLW · Flood Stage {FLOOD} ft<br />
+          Station 8723170 — Miami Beach<br />
+          Status: <span style={{ color: col, fontWeight: 600 }}>
+            {flood ? "FLOOD STAGE BREACHED" : warn ? "ELEVATED" : "NOMINAL"}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 2, marginTop: 10, flexWrap: "wrap" }}>
+          {Array.from({ length: 30 }).map((_, i) => {
+            const on = i < Math.round(pct * 0.3);
+            const c = i >= 24 ? P.pink : i >= 18 ? P.amber : P.cyan;
+            return <div key={i} style={{
+              width: mobile ? 3 : 4, height: mobile ? 10 : 12, borderRadius: 1,
+              background: on ? c : `${P.dim}33`,
+            }} />;
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TideCurve({ hourly, hilo }) {
+  if (!hourly || hourly.length < 3) return null;
+  const vals = hourly.map(h => parseFloat(h.v));
+  const maxV = Math.max(...vals, FLOOD + 0.5);
+  const minV = Math.min(...vals, 0);
+  const range = maxV - minV || 1;
+  const W = 520, H = 80;
+  const pts = vals.map((v, i) => [(i / (vals.length - 1)) * W, H - ((v - minV) / range) * H]);
+  const pathD = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const areaD = `M0,${H} ${pts.map(p => `L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ")} L${W},${H} Z`;
+  const floodY = H - ((FLOOD - minV) / range) * H;
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="auto" style={{ display: "block" }}>
+        <defs>
+          <linearGradient id="tc-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={P.cyan} stopOpacity="0.2" />
+            <stop offset="100%" stopColor={P.cyan} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <line x1="0" y1={floodY} x2={W} y2={floodY} stroke={P.pink} strokeWidth="0.7" strokeDasharray="4,3" opacity="0.6" />
+        <text x={W - 4} y={floodY - 3} fill={P.pinkSoft} fontSize="7" fontFamily={FONT} textAnchor="end" opacity="0.8">FLOOD</text>
+        <path d={areaD} fill="url(#tc-fill)" />
+        <path d={pathD} fill="none" stroke={P.cyan} strokeWidth="1.5" />
+        {hilo && hilo.map((p, i) => {
+          const t = new Date(p.t);
+          const hr = t.getHours() + t.getMinutes() / 60;
+          const x = (hr / 24) * W;
+          const v = parseFloat(p.v);
+          const y = H - ((v - minV) / range) * H;
+          const hi = p.type === "H";
+          return (
+            <g key={i}>
+              <circle cx={x} cy={y} r={3.5} fill={hi ? P.cyan : P.pink} />
+              <text x={x} y={y - 8} fill={hi ? P.cyanSoft : P.pinkSoft} fontSize="8" fontFamily={FONT} textAnchor="middle" fontWeight="600">
+                {v.toFixed(1)}'
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT, fontSize: 8, color: P.label, marginTop: 3 }}>
+        {["12a", "6a", "12p", "6p", "12a"].map((l, i) => <span key={i}>{l}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function WindRose({ deg, speed, gust, dir, mobile }) {
+  const sz = mobile ? 100 : 120;
+  const cx = sz / 2, r1 = cx - 6, r2 = cx - 20;
+  return (
+    <div style={{ textAlign: "center" }}>
+      <svg viewBox={`0 0 ${sz} ${sz}`} width={sz} height={sz} style={{ margin: "0 auto", display: "block" }}>
+        <circle cx={cx} cy={cx} r={r1} fill="none" stroke={P.border} strokeWidth="0.7" />
+        <circle cx={cx} cy={cx} r={r2} fill="none" stroke={P.border} strokeWidth="0.5" strokeDasharray="2,3" />
+        {[["N", cx, 8], ["E", sz - 7, cx + 1], ["S", cx, sz - 5], ["W", 7, cx + 1]].map(([l, x, y]) => (
+          <text key={l} x={x} y={y} fill={P.textSoft} fontSize="8" fontFamily={FONT} textAnchor="middle" dominantBaseline="middle" fontWeight="600">{l}</text>
+        ))}
+        {deg != null && <g transform={`rotate(${deg},${cx},${cx})`}>
+          <line x1={cx} y1={cx} x2={cx} y2={14} stroke={P.cyan} strokeWidth="2" strokeLinecap="round" />
+          <polygon points={`${cx},11 ${cx - 4},21 ${cx + 4},21`} fill={P.cyan} />
+        </g>}
+        <circle cx={cx} cy={cx} r="3" fill={P.cyan} />
+      </svg>
+      <div style={{ fontFamily: FONT, fontSize: mobile ? 22 : 28, fontWeight: 700, color: P.white, marginTop: 10 }}>
+        {speed ?? "—"}<span style={{ fontSize: 11, color: P.textSoft, fontWeight: 400 }}> mph</span>
+      </div>
+      {dir && (
+        <div style={{
+          display: "inline-block", fontFamily: FONT, fontSize: 11, fontWeight: 600,
+          color: P.pinkSoft, border: `1px solid ${P.pink}44`, borderRadius: 3,
+          padding: "2px 10px", marginTop: 6,
+        }}>{dir}</div>
+      )}
+      {gust != null && (
+        <div style={{ fontFamily: FONT, fontSize: 9, color: P.textSoft, marginTop: 6 }}>
+          Gusts to <span style={{ color: gust > 25 ? P.pinkSoft : P.amber, fontWeight: 600 }}>{gust} mph</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ForecastRow({ items, mobile }) {
+  if (!items || !items.length) return null;
+  const cols = mobile ? 3 : Math.min(items.length, 6);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: mobile ? 6 : 8 }}>
+      {items.slice(0, 6).map((p, i) => (
+        <div key={i} style={{
+          background: P.panel, border: `1px solid ${P.border}`, borderRadius: 6,
+          padding: mobile ? "10px 8px" : "14px 10px", textAlign: "center",
+        }}>
+          <div style={{ fontFamily: FONT, fontSize: mobile ? 7 : 8, color: P.cyanSoft, letterSpacing: 1.5, fontWeight: 600, marginBottom: 6 }}>
+            {(p.name || "").toUpperCase().slice(0, mobile ? 8 : 10)}
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: mobile ? 22 : 28, fontWeight: 700, color: P.white, lineHeight: 1 }}>
+            {p.temp}<span style={{ fontSize: mobile ? 9 : 11, color: P.textSoft }}>°{p.unit}</span>
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: mobile ? 7 : 8, color: P.text, marginTop: 6, lineHeight: 1.4 }}>
+            {(p.short || "").slice(0, mobile ? 14 : 20)}
+          </div>
+          {p.precip > 0 && (
+            <div style={{
+              fontFamily: FONT, fontSize: mobile ? 8 : 9, fontWeight: 600, marginTop: 4,
+              color: p.precip > 50 ? P.pinkSoft : p.precip > 25 ? P.amber : P.cyanSoft,
+            }}>
+              {p.precip}% rain
+            </div>
+          )}
+          {!mobile && p.wind && <div style={{ fontFamily: FONT, fontSize: 7, color: P.label, marginTop: 4 }}>{p.wind}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AlertBanner({ alerts }) {
+  if (!alerts || !alerts.length) return null;
+  return (
+    <div style={{
+      background: `${P.pink}0c`, border: `1px solid ${P.pink}44`, borderRadius: 6,
+      padding: "14px 16px", marginBottom: 16,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <Dot color={P.pink} size={7} />
+        <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: P.pinkSoft, letterSpacing: 3 }}>
+          RED ALERT
+        </span>
+      </div>
+      {alerts.map((a, i) => (
+        <div key={i} style={{
+          fontFamily: FONT, fontSize: 10, color: P.text, lineHeight: 1.6,
+          borderLeft: `2px solid ${P.pink}44`, paddingLeft: 12, marginTop: i ? 6 : 0,
+        }}>
+          <span style={{ color: P.pinkSoft, fontWeight: 600 }}>{a.event}</span> — {a.headline}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── MAIN ───
+export default function MIAEnvironmental() {
+  const w = useWidth();
+  const mobile = w < 640;
+  const tablet = w < 860;
+
+  const [now, setNow] = useState(new Date());
+  const [data, setData] = useState(FALLBACK);
+  const [alerts, setAlerts] = useState([]);
+  const [live, setLive] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
+  const [show, setShow] = useState(false);
+
+  useEffect(() => { setTimeout(() => setShow(true), 150); }, []);
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+
+  const fetchLive = useCallback(async () => {
+    const hdr = { "User-Agent": "(MIA-Intel, contact@mia.dev)" };
+    let got = false;
+    const d = { ...FALLBACK };
+    const td = (() => { const x = new Date(); return `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, "0")}${String(x.getDate()).padStart(2, "0")}`; })();
+
+    try {
+      const r = await fetch("https://api.weather.gov/stations/KMIA/observations/latest", { headers: hdr });
+      if (r.ok) {
+        const j = await r.json(), p = j.properties;
+        if (p?.temperature?.value != null) { d.temp = Math.round(p.temperature.value * 9 / 5 + 32); got = true; }
+        if (p?.relativeHumidity?.value != null) d.humidity = Math.round(p.relativeHumidity.value);
+        if (p?.dewpoint?.value != null) d.dewpoint = Math.round(p.dewpoint.value * 9 / 5 + 32);
+        if (p?.barometricPressure?.value != null) { d.pressure = +(p.barometricPressure.value / 100).toFixed(1); d.pressureIn = (p.barometricPressure.value / 3386.39).toFixed(2); }
+        if (p?.windSpeed?.value != null) d.wind = Math.round(p.windSpeed.value * 0.621371);
+        if (p?.windGust?.value != null) d.gust = Math.round(p.windGust.value * 0.621371);
+        if (p?.windDirection?.value != null) d.windDir = p.windDirection.value;
+        if (p?.visibility?.value != null) d.visibility = +(p.visibility.value / 1609.34).toFixed(1);
+        if (p?.heatIndex?.value != null) d.heatIdx = Math.round(p.heatIndex.value * 9 / 5 + 32);
+        if (p?.windChill?.value != null) d.feelsLike = Math.round(p.windChill.value * 9 / 5 + 32);
+        else if (p?.heatIndex?.value != null) d.feelsLike = d.heatIdx;
+        if (p?.textDescription) d.desc = p.textDescription;
+      }
+    } catch (e) {}
+    try {
+      const r = await fetch(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?date=latest&station=8723170&product=water_level&datum=MLLW&units=english&time_zone=lst_ldt&format=json`);
+      if (r.ok) { const j = await r.json(); if (j.data?.[0]) { d.waterLevel = parseFloat(j.data[0].v); got = true; } }
+    } catch (e) {}
+    try {
+      const r = await fetch(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${td}&range=24&station=8723170&product=predictions&datum=MLLW&units=english&time_zone=lst_ldt&format=json&interval=hilo`);
+      if (r.ok) { const j = await r.json(); if (j.predictions?.length) d.hilo = j.predictions; }
+    } catch (e) {}
+    try {
+      const r = await fetch(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${td}&range=24&station=8723170&product=predictions&datum=MLLW&units=english&time_zone=lst_ldt&format=json&interval=h`);
+      if (r.ok) { const j = await r.json(); if (j.predictions?.length) d.hourly = j.predictions; }
+    } catch (e) {}
+    try {
+      const r = await fetch("https://api.weather.gov/alerts/active?zone=FLZ172", { headers: hdr });
+      if (r.ok) { const j = await r.json(); setAlerts((j.features || []).map(f => ({ event: f.properties?.event, headline: f.properties?.headline }))); }
+    } catch (e) {}
+    try {
+      const r = await fetch("https://api.weather.gov/gridpoints/MFL/75,53/forecast", { headers: hdr });
+      if (r.ok) {
+        const j = await r.json(), periods = j.properties?.periods;
+        if (periods?.length) {
+          d.forecast = periods.slice(0, 6).map(p => ({
+            name: p.name, temp: p.temperature, unit: p.temperatureUnit,
+            short: p.shortForecast, wind: p.windSpeed,
+            precip: p.probabilityOfPrecipitation?.value || 0,
+          }));
+        }
+      }
+    } catch (e) {}
+
+    setData(d);
+    setLive(got);
+    setLastSync(new Date());
+  }, []);
+
+  useEffect(() => {
+    fetchLive();
+    const t = setInterval(fetchLive, 300000);
+    return () => clearInterval(t);
+  }, [fetchLive]);
+
+  const d = data;
+  const precipRisk = d.humidity > 85 ? "HIGH" : d.humidity > 65 ? "MODERATE" : "LOW";
+  const precipCol = precipRisk === "HIGH" ? P.pinkSoft : precipRisk === "MODERATE" ? P.amber : P.cyanSoft;
+  const windDirStr = dirLabel(d.windDir);
+
+  const fade = (delay = 0) => ({
+    opacity: show ? 1 : 0, transform: show ? "none" : "translateY(10px)",
+    transition: `opacity 0.5s ${delay}ms, transform 0.5s ${delay}ms`,
+  });
+
+  const pad = mobile ? "12px" : "20px 16px";
+
+  return (
+    <div style={{ minHeight: "100vh", background: P.bg, fontFamily: FONT, color: P.text }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        @keyframes dot-pulse { 0%,100%{opacity:1}50%{opacity:.35} }
+        ::-webkit-scrollbar{width:3px}
+        ::-webkit-scrollbar-track{background:${P.bg}}
+        ::-webkit-scrollbar-thumb{background:${P.cyan}33;border-radius:2px}
+      `}</style>
+
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: pad, paddingBottom: 48 }}>
+
+        {/* ── HEADER ── */}
+        <div style={{ ...fade(0), borderBottom: `1px solid ${P.border}`, paddingBottom: 18, marginBottom: 18 }}>
+          <div style={{ textAlign: "center", marginBottom: 12 }}>
+            <span style={{ fontSize: mobile ? 7 : 8, letterSpacing: 3, color: P.label }}>
+              CLASSIFIED · M.I.A. INTELLIGENCE NETWORK · DATA SHEET 02
+            </span>
+          </div>
+
+          {mobile ? (
+            <div style={{ textAlign: "center" }}>
+              <h1 style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, letterSpacing: 4, color: P.white, margin: 0 }}>
+                M.I.A. <span style={{ color: P.cyan }}>ENV INTEL</span>
+              </h1>
+              <div style={{ fontSize: 8, color: P.textSoft, letterSpacing: 2, marginTop: 4 }}>
+                MIAMI-DADE ATMOSPHERIC & TIDAL PULSE
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: P.cyan, letterSpacing: 2, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>
+                {now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+              </div>
+              <div style={{ fontSize: 8, color: P.textSoft, letterSpacing: 1 }}>
+                {now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "2-digit", year: "numeric" }).toUpperCase()} · EST
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+              <div>
+                <h1 style={{ fontFamily: FONT, fontSize: 18, fontWeight: 800, letterSpacing: 6, color: P.white, margin: 0 }}>
+                  M.I.A. <span style={{ color: P.cyan }}>ENVIRONMENTAL INTEL</span>
+                </h1>
+                <div style={{ fontSize: 9, color: P.textSoft, letterSpacing: 2, marginTop: 6 }}>
+                  MIAMI-DADE ATMOSPHERIC & TIDAL PULSE
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: P.cyan, letterSpacing: 2, fontVariantNumeric: "tabular-nums" }}>
+                  {now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+                </div>
+                <div style={{ fontSize: 9, color: P.textSoft, letterSpacing: 1 }}>
+                  {now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "2-digit", year: "numeric" }).toUpperCase()} · EST
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Narrative */}
+          <div style={{
+            marginTop: 14, padding: mobile ? "10px 12px" : "10px 14px",
+            borderLeft: `2px solid ${P.cyan}44`, background: `${P.panel}cc`,
+            borderRadius: "0 4px 4px 0", fontSize: mobile ? 9 : 10,
+            color: P.textSoft, lineHeight: 1.8, fontStyle: "italic",
+          }}>
+            Monitoring rising tides and urban precipitation. Tracking Miami-Dade's living infrastructure to predict flooding before it hits the grid.
+          </div>
+
+          {/* Status bar */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginTop: 10, padding: mobile ? "8px 10px" : "8px 14px",
+            background: P.panel, borderRadius: 4, border: `1px solid ${P.border}`,
+            flexWrap: "wrap", gap: 6,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <Dot color={live ? P.green : P.amber} size={5} />
+              <span style={{ fontSize: 9, color: live ? P.green : P.amber, letterSpacing: 2, fontWeight: 600 }}>
+                {live ? "LIVE" : "BASELINE"}
+              </span>
+            </div>
+            <span style={{ fontSize: 8, color: P.label, letterSpacing: 1 }}>
+              {lastSync ? `SYNC ${lastSync.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}` : "SYNCING..."} · 5m REFRESH
+            </span>
+          </div>
+        </div>
+
+        {/* ── ALERTS ── */}
+        <div style={fade(100)}>
+          <AlertBanner alerts={alerts} />
+          {alerts.length === 0 && lastSync && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8, padding: "9px 14px",
+              background: `${P.green}0a`, border: `1px solid ${P.green}22`, borderRadius: 4, marginBottom: 14,
+            }}>
+              <Dot color={P.green} size={5} />
+              <span style={{ fontSize: 9, color: P.green, letterSpacing: 2 }}>
+                NO ACTIVE ALERTS — STATUS: STABLE
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* ── PRIMARY METRICS ── */}
+        <div style={fade(200)}>
+          <SectionLabel>Conditions</SectionLabel>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: mobile ? "1fr 1fr" : tablet ? "repeat(2, 1fr)" : "repeat(4, 1fr)",
+            gap: mobile ? 8 : 10, marginBottom: 16,
+          }}>
+            <MetricBox label="TEMPERATURE" value={d.temp} unit="°F" large mobile={mobile}
+              sub={`Feels ${d.feelsLike}°F · ${d.desc}`} color={P.white} />
+            <MetricBox label="PRESSURE" value={d.pressure} unit="mb" large mobile={mobile}
+              sub={`${d.pressureIn} inHg`} color={P.cyanSoft} />
+            <MetricBox label="CURRENT TIDE" value={d.waterLevel?.toFixed(2)} unit="ft" large mobile={mobile}
+              sub="MLLW · Stn 8723170"
+              color={d.waterLevel >= FLOOD * 0.75 ? P.amber : P.cyanSoft} />
+            <MetricBox label="PRECIP RISK" value={precipRisk} unit="" large mobile={mobile}
+              sub={`RH ${d.humidity}% · Dew ${d.dewpoint}°F`} color={precipCol} />
+          </div>
+        </div>
+
+        {/* ── SECONDARY METRICS ── */}
+        <div style={fade(300)}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: mobile ? "repeat(3, 1fr)" : tablet ? "repeat(3, 1fr)" : "repeat(5, 1fr)",
+            gap: mobile ? 6 : 8, marginBottom: 16,
+          }}>
+            <MetricBox label="HUMIDITY" value={d.humidity} unit="%" mobile={mobile} color={P.cyanSoft} />
+            <MetricBox label="DEW POINT" value={d.dewpoint} unit="°F" mobile={mobile} color={P.cyanSoft} />
+            <MetricBox label="VISIBILITY" value={d.visibility} unit="mi" mobile={mobile} color={P.cyanSoft} />
+            <MetricBox label="HEAT INDEX" value={d.heatIdx} unit="°F" mobile={mobile} color={d.heatIdx > 100 ? P.pinkSoft : P.cyanSoft} />
+            <MetricBox label="WIND GUST" value={d.gust} unit="mph" mobile={mobile} color={d.gust > 25 ? P.pinkSoft : P.cyanSoft} />
+          </div>
+        </div>
+
+        {/* ── TIDE GAUGE + WIND ── */}
+        <div style={{
+          ...fade(400),
+          display: "grid",
+          gridTemplateColumns: mobile ? "1fr" : tablet ? "1fr" : "1fr 240px",
+          gap: 12, marginBottom: 16,
+        }}>
+          <div style={{ background: P.panel, border: `1px solid ${P.border}`, borderRadius: 6, padding: mobile ? "16px 14px" : "20px 22px" }}>
+            <SectionLabel>Tide Gauge</SectionLabel>
+            <TideGauge level={d.waterLevel} mobile={mobile} />
+
+            {d.hilo.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 9, color: P.label, letterSpacing: 2, marginBottom: 8 }}>NEXT TIDES</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {d.hilo.slice(0, 4).map((p, i) => {
+                    const hi = p.type === "H";
+                    const t = new Date(p.t);
+                    return (
+                      <div key={i} style={{
+                        background: P.bg, border: `1px solid ${hi ? P.cyan : P.pink}33`,
+                        borderRadius: 4, padding: mobile ? "5px 8px" : "6px 12px", textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: mobile ? 11 : 13, fontWeight: 700, color: hi ? P.cyanSoft : P.pinkSoft }}>
+                          {parseFloat(p.v).toFixed(2)}'
+                        </div>
+                        <div style={{ fontSize: 7, color: P.textSoft, marginTop: 2 }}>
+                          {hi ? "HIGH" : "LOW"} · {t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 9, color: P.label, letterSpacing: 2, marginBottom: 8 }}>24H TIDE CURVE</div>
+              <TideCurve hourly={d.hourly} hilo={d.hilo} />
+            </div>
+          </div>
+
+          {/* Wind */}
+          <div style={{
+            background: P.panel, border: `1px solid ${P.border}`, borderRadius: 6,
+            padding: mobile ? "16px" : "20px 16px",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          }}>
+            <SectionLabel>Wind Vector</SectionLabel>
+            <WindRose deg={d.windDir} speed={d.wind} gust={d.gust} dir={windDirStr} mobile={mobile} />
+            <div style={{ fontFamily: FONT, fontSize: 8, color: P.label, marginTop: 12, letterSpacing: 1 }}>
+              SOURCE: NWS KMIA
+            </div>
+          </div>
+        </div>
+
+        {/* ── FORECAST ── */}
+        <div style={{ ...fade(500), marginBottom: 24 }}>
+          <SectionLabel>Extended Forecast</SectionLabel>
+          <ForecastRow items={d.forecast} mobile={mobile} />
+        </div>
+
+        {/* ── FOOTER ── */}
+        <div style={{ ...fade(600), borderTop: `1px solid ${P.border}`, paddingTop: 20, textAlign: "center" }}>
+          <button
+            style={{
+              background: "transparent", border: `1px solid ${P.border}`, borderRadius: 4,
+              padding: mobile ? "12px 24px" : "13px 36px", fontFamily: FONT,
+              fontSize: mobile ? 9 : 10, fontWeight: 600,
+              color: P.cyanSoft, letterSpacing: 3, cursor: "pointer", transition: "all 0.3s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = P.cyan; e.currentTarget.style.boxShadow = `0 0 20px ${P.cyan}15`; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = P.border; e.currentTarget.style.boxShadow = "none"; }}
+          >
+            CLOSE FILE / RETURN TO STATION
+          </button>
+          <div style={{ fontSize: 8, color: P.label, letterSpacing: 2, marginTop: 14, lineHeight: 1.8 }}>
+            M.I.A. INTELLIGENCE NETWORK — ENV MODULE v4.0<br />
+            MIAMI-DADE COUNTY · {live ? "LIVE FEEDS" : "BASELINE MODE"} · 5 MIN REFRESH
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
