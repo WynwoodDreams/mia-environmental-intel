@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>M.I.A. Environmental Intel</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🌊</text></svg>"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{min-height:100vh}
+body{background:#080810;font-family:'JetBrains Mono','SF Mono','Fira Code',monospace;color:#d0d0e0;-webkit-font-smoothing:antialiased}
+@keyframes dot-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:#080810}
+::-webkit-scrollbar-thumb{background:#00d4ff33;border-radius:2px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+const e=React.createElement,{useState,useEffect,useCallback}=React;
+
+const P={
+  bg:"#080810",panel:"#0e0e18",border:"#222236",
+  cyan:"#00d4ff",cyanSoft:"#66e0ff",pink:"#ff3070",pinkSoft:"#ff6090",
+  green:"#2eec8a",amber:"#ffcc44",white:"#f2f2fa",
+  text:"#d0d0e0",textSoft:"#a8a8c0",label:"#8888a4",dim:"#5c5c78"
+};
+const FONT="'JetBrains Mono','SF Mono','Fira Code',monospace";
+const FLOOD=3.2;
+
+function todayAt(h,m){const d=new Date();d.setHours(h,m,0,0);return d.toISOString()}
+const FALLBACK={
+  temp:82,feelsLike:87,humidity:74,dewpoint:73,pressure:1015.2,pressureIn:"29.98",
+  wind:12,gust:18,windDir:135,visibility:10.0,heatIdx:87,desc:"Partly Cloudy",waterLevel:1.47,
+  hilo:[
+    {t:todayAt(6,12),v:"2.81",type:"H"},{t:todayAt(12,38),v:"0.14",type:"L"},
+    {t:todayAt(18,45),v:"2.64",type:"H"},{t:todayAt(23,55),v:"0.42",type:"L"}
+  ],
+  hourly:Array.from({length:25},(_,i)=>({t:todayAt(i,0),v:String((1.5+1.3*Math.sin((i-3)*Math.PI/6.2)).toFixed(2))})),
+  forecast:[
+    {name:"Tonight",temp:78,unit:"F",short:"Partly Cloudy",wind:"SE 10 mph",precip:20},
+    {name:"Thursday",temp:86,unit:"F",short:"Scattered Showers",wind:"SE 12 mph",precip:40},
+    {name:"Thu Night",temp:77,unit:"F",short:"Mostly Cloudy",wind:"E 8 mph",precip:25},
+    {name:"Friday",temp:88,unit:"F",short:"Sunny",wind:"SE 10 mph",precip:10},
+    {name:"Fri Night",temp:76,unit:"F",short:"Clear",wind:"E 6 mph",precip:5},
+    {name:"Saturday",temp:89,unit:"F",short:"Mostly Sunny",wind:"S 8 mph",precip:15}
+  ]
+};
+const dirLabel=d=>["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"][Math.round(d/22.5)%16];
+
+function useWidth(){
+  const[w,setW]=useState(window.innerWidth);
+  useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h)},[]);
+  return w;
+}
+
+function Dot({color=P.cyan,size=6}){
+  return e("span",{style:{display:"inline-block",width:size,height:size,borderRadius:"50%",background:color,boxShadow:`0 0 ${size+2}px ${color}`,animation:"dot-pulse 2.5s ease-in-out infinite",flexShrink:0}});
+}
+
+function SectionLabel({children}){
+  return e("div",{style:{fontFamily:FONT,fontSize:10,fontWeight:600,color:P.label,letterSpacing:3,textTransform:"uppercase",marginBottom:12,display:"flex",alignItems:"center",gap:8}},
+    e("span",{style:{width:14,height:1,background:P.cyan,display:"inline-block",flexShrink:0}}),children);
+}
+
+function MetricBox({label,value,unit,sub,color=P.cyan,large=false,mobile=false}){
+  return e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:large?(mobile?"16px":"20px 22px"):(mobile?"12px 14px":"14px 16px"),display:"flex",flexDirection:"column",gap:4}},
+    e("div",{style:{fontFamily:FONT,fontSize:mobile?8:9,color:P.label,letterSpacing:2}},label),
+    e("div",{style:{fontFamily:FONT,fontSize:large?(mobile?26:32):(mobile?18:22),fontWeight:700,color,lineHeight:1,marginTop:2}},
+      value!=null?value:e("span",{style:{opacity:.25}},"—"),
+      unit?e("span",{style:{fontSize:large?(mobile?11:14):(mobile?9:11),color:P.textSoft,fontWeight:400,marginLeft:3}},unit):null),
+    sub?e("div",{style:{fontFamily:FONT,fontSize:mobile?8:9,color:P.textSoft,lineHeight:1.5,marginTop:2}},sub):null);
+}
+
+function TideGauge({level,mobile}){
+  const maxH=5,pct=level!=null?Math.max(0,Math.min(100,(level/maxH)*100)):0;
+  const floodPct=(FLOOD/maxH)*100;
+  const warn=level!=null&&level>=FLOOD*.75,flood=level!=null&&level>=FLOOD;
+  const col=flood?P.pink:warn?P.amber:P.cyan;
+  return e("div",{style:{display:"flex",gap:mobile?12:16,alignItems:"stretch"}},
+    e("div",{style:{position:"relative",width:mobile?32:40,minHeight:mobile?150:180,background:P.bg,borderRadius:4,border:`1px solid ${P.border}`,overflow:"hidden"}},
+      e("div",{style:{position:"absolute",bottom:0,left:0,right:0,height:`${pct}%`,transition:"height 2s cubic-bezier(.25,.46,.45,.94)",background:`linear-gradient(0deg,${col}40,${col}10)`}},
+        e("div",{style:{height:2,background:col,boxShadow:`0 0 8px ${col}`}})),
+      e("div",{style:{position:"absolute",left:0,right:0,bottom:`${floodPct}%`,borderTop:`1px dashed ${P.pink}88`}}),
+      [1,2,3,4].map(v=>e("div",{key:v,style:{position:"absolute",right:4,bottom:`${(v/maxH)*100}%`,transform:"translateY(50%)",fontFamily:FONT,fontSize:7,color:P.label}},v))
+    ),
+    e("div",{style:{flex:1,display:"flex",flexDirection:"column",justifyContent:"center"}},
+      e("div",{style:{fontFamily:FONT,fontSize:mobile?34:44,fontWeight:700,color:col,lineHeight:1}},
+        level!=null?level.toFixed(2):"—.——",
+        e("span",{style:{fontSize:mobile?13:16,color:P.textSoft,fontWeight:400,marginLeft:4}},"ft")),
+      e("div",{style:{fontFamily:FONT,fontSize:mobile?9:10,color:P.textSoft,marginTop:8,lineHeight:1.8}},
+        "Datum MLLW · Flood Stage "+FLOOD+" ft",e("br"),
+        "Station 8723170 — Miami Beach",e("br"),
+        "Status: ",e("span",{style:{color:col,fontWeight:600}},flood?"FLOOD STAGE BREACHED":warn?"ELEVATED":"NOMINAL")),
+      e("div",{style:{display:"flex",gap:2,marginTop:10,flexWrap:"wrap"}},
+        Array.from({length:30}).map((_,i)=>{
+          const on=i<Math.round(pct*.3),c=i>=24?P.pink:i>=18?P.amber:P.cyan;
+          return e("div",{key:i,style:{width:mobile?3:4,height:mobile?10:12,borderRadius:1,background:on?c:`${P.dim}33`}});
+        }))
+    )
+  );
+}
+
+function TideCurve({hourly,hilo}){
+  if(!hourly||hourly.length<3)return null;
+  const vals=hourly.map(h=>parseFloat(h.v)),maxV=Math.max(...vals,FLOOD+.5),minV=Math.min(...vals,0),range=maxV-minV||1;
+  const W=520,H=80;
+  const pts=vals.map((v,i)=>[(i/(vals.length-1))*W,H-((v-minV)/range)*H]);
+  const pathD=pts.map((p,i)=>`${i===0?"M":"L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const areaD=`M0,${H} ${pts.map(p=>`L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ")} L${W},${H} Z`;
+  const floodY=H-((FLOOD-minV)/range)*H;
+
+  const svgChildren=[
+    e("defs",{key:"d"},e("linearGradient",{id:"tc-fill",x1:0,y1:0,x2:0,y2:1},
+      e("stop",{offset:"0%",stopColor:P.cyan,stopOpacity:.2}),e("stop",{offset:"100%",stopColor:P.cyan,stopOpacity:0}))),
+    e("line",{key:"fl",x1:0,y1:floodY,x2:W,y2:floodY,stroke:P.pink,strokeWidth:.7,strokeDasharray:"4,3",opacity:.6}),
+    e("text",{key:"flt",x:W-4,y:floodY-3,fill:P.pinkSoft,fontSize:7,fontFamily:FONT,textAnchor:"end",opacity:.8},"FLOOD"),
+    e("path",{key:"a",d:areaD,fill:"url(#tc-fill)"}),
+    e("path",{key:"l",d:pathD,fill:"none",stroke:P.cyan,strokeWidth:1.5})
+  ];
+  if(hilo)hilo.forEach((p,i)=>{
+    const t=new Date(p.t),hr=t.getHours()+t.getMinutes()/60,x=(hr/24)*W,v=parseFloat(p.v),y=H-((v-minV)/range)*H,hi=p.type==="H";
+    svgChildren.push(e("circle",{key:"c"+i,cx:x,cy:y,r:3.5,fill:hi?P.cyan:P.pink}));
+    svgChildren.push(e("text",{key:"t"+i,x,y:y-8,fill:hi?P.cyanSoft:P.pinkSoft,fontSize:8,fontFamily:FONT,textAnchor:"middle",fontWeight:600},v.toFixed(1)+"'"));
+  });
+
+  return e("div",null,
+    e("svg",{viewBox:`0 0 ${W} ${H}`,width:"100%",style:{display:"block"}},svgChildren),
+    e("div",{style:{display:"flex",justifyContent:"space-between",fontFamily:FONT,fontSize:8,color:P.label,marginTop:3}},
+      ["12a","6a","12p","6p","12a"].map((l,i)=>e("span",{key:i},l)))
+  );
+}
+
+function WindRose({deg,speed,gust,dir,mobile}){
+  const sz=mobile?100:120,cx=sz/2;
+  const cardinals=[["N",cx,8],["E",sz-7,cx+1],["S",cx,sz-5],["W",7,cx+1]];
+  return e("div",{style:{textAlign:"center"}},
+    e("svg",{viewBox:`0 0 ${sz} ${sz}`,width:sz,height:sz,style:{margin:"0 auto",display:"block"}},
+      e("circle",{cx,cy:cx,r:cx-6,fill:"none",stroke:P.border,strokeWidth:.7}),
+      e("circle",{cx,cy:cx,r:cx-20,fill:"none",stroke:P.border,strokeWidth:.5,strokeDasharray:"2,3"}),
+      cardinals.map(([l,x,y])=>e("text",{key:l,x,y,fill:P.textSoft,fontSize:8,fontFamily:FONT,textAnchor:"middle",dominantBaseline:"middle",fontWeight:600},l)),
+      deg!=null?e("g",{transform:`rotate(${deg},${cx},${cx})`},
+        e("line",{x1:cx,y1:cx,x2:cx,y2:14,stroke:P.cyan,strokeWidth:2,strokeLinecap:"round"}),
+        e("polygon",{points:`${cx},11 ${cx-4},21 ${cx+4},21`,fill:P.cyan})):null,
+      e("circle",{cx,cy:cx,r:3,fill:P.cyan})
+    ),
+    e("div",{style:{fontFamily:FONT,fontSize:mobile?22:28,fontWeight:700,color:P.white,marginTop:10}},
+      speed!=null?speed:"—",e("span",{style:{fontSize:11,color:P.textSoft,fontWeight:400}}," mph")),
+    dir?e("div",{style:{display:"inline-block",fontFamily:FONT,fontSize:11,fontWeight:600,color:P.pinkSoft,border:`1px solid ${P.pink}44`,borderRadius:3,padding:"2px 10px",marginTop:6}},dir):null,
+    gust!=null?e("div",{style:{fontFamily:FONT,fontSize:9,color:P.textSoft,marginTop:6}},"Gusts to ",e("span",{style:{color:gust>25?P.pinkSoft:P.amber,fontWeight:600}},gust+" mph")):null
+  );
+}
+
+function ForecastRow({items,mobile}){
+  if(!items||!items.length)return null;
+  const cols=mobile?3:Math.min(items.length,6);
+  return e("div",{style:{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:mobile?6:8}},
+    items.slice(0,6).map((p,i)=>e("div",{key:i,style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"10px 8px":"14px 10px",textAlign:"center"}},
+      e("div",{style:{fontFamily:FONT,fontSize:mobile?7:8,color:P.cyanSoft,letterSpacing:1.5,fontWeight:600,marginBottom:6}},(p.name||"").toUpperCase().slice(0,mobile?8:10)),
+      e("div",{style:{fontFamily:FONT,fontSize:mobile?22:28,fontWeight:700,color:P.white,lineHeight:1}},p.temp,e("span",{style:{fontSize:mobile?9:11,color:P.textSoft}},"°"+p.unit)),
+      e("div",{style:{fontFamily:FONT,fontSize:mobile?7:8,color:P.text,marginTop:6,lineHeight:1.4}},(p.short||"").slice(0,mobile?14:20)),
+      p.precip>0?e("div",{style:{fontFamily:FONT,fontSize:mobile?8:9,fontWeight:600,marginTop:4,color:p.precip>50?P.pinkSoft:p.precip>25?P.amber:P.cyanSoft}},p.precip+"% rain"):null,
+      !mobile&&p.wind?e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,marginTop:4}},p.wind):null
+    ))
+  );
+}
+
+function AlertBanner({alerts}){
+  if(!alerts||!alerts.length)return null;
+  return e("div",{style:{background:`${P.pink}0c`,border:`1px solid ${P.pink}44`,borderRadius:6,padding:"14px 16px",marginBottom:16}},
+    e("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
+      e(Dot,{color:P.pink,size:7}),
+      e("span",{style:{fontFamily:FONT,fontSize:11,fontWeight:700,color:P.pinkSoft,letterSpacing:3}},"RED ALERT")),
+    alerts.map((a,i)=>e("div",{key:i,style:{fontFamily:FONT,fontSize:10,color:P.text,lineHeight:1.6,borderLeft:`2px solid ${P.pink}44`,paddingLeft:12,marginTop:i?6:0}},
+      e("span",{style:{color:P.pinkSoft,fontWeight:600}},a.event)," — ",a.headline))
+  );
+}
+
+function App(){
+  const w=useWidth(),mobile=w<640,tablet=w<860;
+  const[now,setNow]=useState(new Date());
+  const[data,setData]=useState(FALLBACK);
+  const[alerts,setAlerts]=useState([]);
+  const[live,setLive]=useState(false);
+  const[lastSync,setLastSync]=useState(null);
+  const[show,setShow]=useState(false);
+
+  useEffect(()=>{setTimeout(()=>setShow(true),150)},[]);
+  useEffect(()=>{const t=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(t)},[]);
+
+  const fetchLive=useCallback(async()=>{
+    const hdr={"User-Agent":"(MIA-Intel,contact@mia.dev)"};
+    let got=false;const d={...FALLBACK};
+    const td=(()=>{const x=new Date();return`${x.getFullYear()}${String(x.getMonth()+1).padStart(2,"0")}${String(x.getDate()).padStart(2,"0")}`})();
+
+    try{const r=await fetch("https://api.weather.gov/stations/KMIA/observations/latest",{headers:hdr});
+      if(r.ok){const j=await r.json(),p=j.properties;
+        if(p?.temperature?.value!=null){d.temp=Math.round(p.temperature.value*9/5+32);got=true}
+        if(p?.relativeHumidity?.value!=null)d.humidity=Math.round(p.relativeHumidity.value);
+        if(p?.dewpoint?.value!=null)d.dewpoint=Math.round(p.dewpoint.value*9/5+32);
+        if(p?.barometricPressure?.value!=null){d.pressure=+(p.barometricPressure.value/100).toFixed(1);d.pressureIn=(p.barometricPressure.value/3386.39).toFixed(2)}
+        if(p?.windSpeed?.value!=null)d.wind=Math.round(p.windSpeed.value*.621371);
+        if(p?.windGust?.value!=null)d.gust=Math.round(p.windGust.value*.621371);
+        if(p?.windDirection?.value!=null)d.windDir=p.windDirection.value;
+        if(p?.visibility?.value!=null)d.visibility=+(p.visibility.value/1609.34).toFixed(1);
+        if(p?.heatIndex?.value!=null)d.heatIdx=Math.round(p.heatIndex.value*9/5+32);
+        if(p?.windChill?.value!=null)d.feelsLike=Math.round(p.windChill.value*9/5+32);
+        else if(p?.heatIndex?.value!=null)d.feelsLike=d.heatIdx;
+        if(p?.textDescription)d.desc=p.textDescription}}catch(e){}
+
+    try{const r=await fetch("https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?date=latest&station=8723170&product=water_level&datum=MLLW&units=english&time_zone=lst_ldt&format=json");
+      if(r.ok){const j=await r.json();if(j.data?.[0]){d.waterLevel=parseFloat(j.data[0].v);got=true}}}catch(e){}
+
+    try{const r=await fetch(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${td}&range=24&station=8723170&product=predictions&datum=MLLW&units=english&time_zone=lst_ldt&format=json&interval=hilo`);
+      if(r.ok){const j=await r.json();if(j.predictions?.length)d.hilo=j.predictions}}catch(e){}
+
+    try{const r=await fetch(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${td}&range=24&station=8723170&product=predictions&datum=MLLW&units=english&time_zone=lst_ldt&format=json&interval=h`);
+      if(r.ok){const j=await r.json();if(j.predictions?.length)d.hourly=j.predictions}}catch(e){}
+
+    try{const r=await fetch("https://api.weather.gov/alerts/active?zone=FLZ172",{headers:hdr});
+      if(r.ok){const j=await r.json();setAlerts((j.features||[]).map(f=>({event:f.properties?.event,headline:f.properties?.headline})))}}catch(e){}
+
+    try{const r=await fetch("https://api.weather.gov/gridpoints/MFL/75,53/forecast",{headers:hdr});
+      if(r.ok){const j=await r.json(),periods=j.properties?.periods;
+        if(periods?.length)d.forecast=periods.slice(0,6).map(p=>({name:p.name,temp:p.temperature,unit:p.temperatureUnit,short:p.shortForecast,wind:p.windSpeed,precip:p.probabilityOfPrecipitation?.value||0}))}}catch(e){}
+
+    setData(d);setLive(got);setLastSync(new Date());
+  },[]);
+
+  useEffect(()=>{fetchLive();const t=setInterval(fetchLive,300000);return()=>clearInterval(t)},[fetchLive]);
+
+  const d=data;
+  const precipRisk=d.humidity>85?"HIGH":d.humidity>65?"MODERATE":"LOW";
+  const precipCol=precipRisk==="HIGH"?P.pinkSoft:precipRisk==="MODERATE"?P.amber:P.cyanSoft;
+  const windDirStr=dirLabel(d.windDir);
+  const fade=(delay=0)=>({opacity:show?1:0,transform:show?"none":"translateY(10px)",transition:`opacity .5s ${delay}ms,transform .5s ${delay}ms`});
+
+  return e("div",{style:{maxWidth:960,margin:"0 auto",padding:mobile?"12px":"20px 16px",paddingBottom:48}},
+
+    // HEADER
+    e("div",{style:{...fade(0),borderBottom:`1px solid ${P.border}`,paddingBottom:18,marginBottom:18}},
+      e("div",{style:{textAlign:"center",marginBottom:12}},
+        e("span",{style:{fontSize:mobile?7:8,letterSpacing:3,color:P.label}},"CLASSIFIED · M.I.A. INTELLIGENCE NETWORK · DATA SHEET 02")),
+
+      mobile?
+        e("div",{style:{textAlign:"center"}},
+          e("h1",{style:{fontFamily:FONT,fontSize:15,fontWeight:800,letterSpacing:4,color:P.white,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENV INTEL")),
+          e("div",{style:{fontSize:8,color:P.textSoft,letterSpacing:2,marginTop:4}},"MIAMI-DADE ATMOSPHERIC & TIDAL PULSE"),
+          e("div",{style:{fontSize:18,fontWeight:700,color:P.cyan,letterSpacing:2,marginTop:8,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})),
+          e("div",{style:{fontSize:8,color:P.textSoft,letterSpacing:1}},now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"2-digit",year:"numeric"}).toUpperCase()+" · EST"))
+      :
+        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16}},
+          e("div",null,
+            e("h1",{style:{fontFamily:FONT,fontSize:18,fontWeight:800,letterSpacing:6,color:P.white,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENVIRONMENTAL INTEL")),
+            e("div",{style:{fontSize:9,color:P.textSoft,letterSpacing:2,marginTop:6}},"MIAMI-DADE ATMOSPHERIC & TIDAL PULSE")),
+          e("div",{style:{textAlign:"right"}},
+            e("div",{style:{fontSize:20,fontWeight:700,color:P.cyan,letterSpacing:2,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})),
+            e("div",{style:{fontSize:9,color:P.textSoft,letterSpacing:1}},now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"2-digit",year:"numeric"}).toUpperCase()+" · EST"))),
+
+      e("div",{style:{marginTop:14,padding:mobile?"10px 12px":"10px 14px",borderLeft:`2px solid ${P.cyan}44`,background:`${P.panel}cc`,borderRadius:"0 4px 4px 0",fontSize:mobile?9:10,color:P.textSoft,lineHeight:1.8,fontStyle:"italic"}},
+        "Monitoring rising tides and urban precipitation. Tracking Miami-Dade\u2019s living infrastructure to predict flooding before it hits the grid."),
+
+      e("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,padding:mobile?"8px 10px":"8px 14px",background:P.panel,borderRadius:4,border:`1px solid ${P.border}`,flexWrap:"wrap",gap:6}},
+        e("div",{style:{display:"flex",alignItems:"center",gap:6}},
+          e(Dot,{color:live?P.green:P.amber,size:5}),
+          e("span",{style:{fontSize:9,color:live?P.green:P.amber,letterSpacing:2,fontWeight:600}},live?"LIVE":"BASELINE")),
+        e("span",{style:{fontSize:8,color:P.label,letterSpacing:1}},
+          (lastSync?"SYNC "+lastSync.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:false}):"SYNCING...")+" · 5m REFRESH"))
+    ),
+
+    // ALERTS
+    e("div",{style:fade(100)},
+      e(AlertBanner,{alerts}),
+      alerts.length===0&&lastSync?e("div",{style:{display:"flex",alignItems:"center",gap:8,padding:"9px 14px",background:`${P.green}0a`,border:`1px solid ${P.green}22`,borderRadius:4,marginBottom:14}},
+        e(Dot,{color:P.green,size:5}),
+        e("span",{style:{fontSize:9,color:P.green,letterSpacing:2}},"NO ACTIVE ALERTS — STATUS: STABLE")):null),
+
+    // PRIMARY
+    e("div",{style:fade(200)},
+      e(SectionLabel,null,"Conditions"),
+      e("div",{style:{display:"grid",gridTemplateColumns:mobile?"1fr 1fr":tablet?"repeat(2,1fr)":"repeat(4,1fr)",gap:mobile?8:10,marginBottom:16}},
+        e(MetricBox,{label:"TEMPERATURE",value:d.temp,unit:"°F",large:true,mobile,sub:`Feels ${d.feelsLike}°F · ${d.desc}`,color:P.white}),
+        e(MetricBox,{label:"PRESSURE",value:d.pressure,unit:"mb",large:true,mobile,sub:`${d.pressureIn} inHg`,color:P.cyanSoft}),
+        e(MetricBox,{label:"CURRENT TIDE",value:d.waterLevel?.toFixed(2),unit:"ft",large:true,mobile,sub:"MLLW · Stn 8723170",color:d.waterLevel>=FLOOD*.75?P.amber:P.cyanSoft}),
+        e(MetricBox,{label:"PRECIP RISK",value:precipRisk,unit:"",large:true,mobile,sub:`RH ${d.humidity}% · Dew ${d.dewpoint}°F`,color:precipCol}))),
+
+    // SECONDARY
+    e("div",{style:fade(300)},
+      e("div",{style:{display:"grid",gridTemplateColumns:mobile?"repeat(3,1fr)":tablet?"repeat(3,1fr)":"repeat(5,1fr)",gap:mobile?6:8,marginBottom:16}},
+        e(MetricBox,{label:"HUMIDITY",value:d.humidity,unit:"%",mobile,color:P.cyanSoft}),
+        e(MetricBox,{label:"DEW POINT",value:d.dewpoint,unit:"°F",mobile,color:P.cyanSoft}),
+        e(MetricBox,{label:"VISIBILITY",value:d.visibility,unit:"mi",mobile,color:P.cyanSoft}),
+        e(MetricBox,{label:"HEAT INDEX",value:d.heatIdx,unit:"°F",mobile,color:d.heatIdx>100?P.pinkSoft:P.cyanSoft}),
+        e(MetricBox,{label:"WIND GUST",value:d.gust,unit:"mph",mobile,color:d.gust>25?P.pinkSoft:P.cyanSoft}))),
+
+    // TIDE + WIND
+    e("div",{style:{...fade(400),display:"grid",gridTemplateColumns:mobile?"1fr":tablet?"1fr":"1fr 240px",gap:12,marginBottom:16}},
+      e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"16px 14px":"20px 22px"}},
+        e(SectionLabel,null,"Tide Gauge"),
+        e(TideGauge,{level:d.waterLevel,mobile}),
+        d.hilo.length>0?e("div",{style:{marginTop:16}},
+          e("div",{style:{fontSize:9,color:P.label,letterSpacing:2,marginBottom:8}},"NEXT TIDES"),
+          e("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+            d.hilo.slice(0,4).map((p,i)=>{
+              const hi=p.type==="H",t=new Date(p.t);
+              return e("div",{key:i,style:{background:P.bg,border:`1px solid ${hi?P.cyan:P.pink}33`,borderRadius:4,padding:mobile?"5px 8px":"6px 12px",textAlign:"center"}},
+                e("div",{style:{fontSize:mobile?11:13,fontWeight:700,color:hi?P.cyanSoft:P.pinkSoft}},parseFloat(p.v).toFixed(2)+"'"),
+                e("div",{style:{fontSize:7,color:P.textSoft,marginTop:2}},(hi?"HIGH":"LOW")+" · "+t.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true})))}))):null,
+        e("div",{style:{marginTop:16}},
+          e("div",{style:{fontSize:9,color:P.label,letterSpacing:2,marginBottom:8}},"24H TIDE CURVE"),
+          e(TideCurve,{hourly:d.hourly,hilo:d.hilo}))),
+      e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"16px":"20px 16px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}},
+        e(SectionLabel,null,"Wind Vector"),
+        e(WindRose,{deg:d.windDir,speed:d.wind,gust:d.gust,dir:windDirStr,mobile}),
+        e("div",{style:{fontFamily:FONT,fontSize:8,color:P.label,marginTop:12,letterSpacing:1}},"SOURCE: NWS KMIA"))),
+
+    // FORECAST
+    e("div",{style:{...fade(500),marginBottom:24}},
+      e(SectionLabel,null,"Extended Forecast"),
+      e(ForecastRow,{items:d.forecast,mobile})),
+
+    // FOOTER
+    e("div",{style:{...fade(600),borderTop:`1px solid ${P.border}`,paddingTop:20,textAlign:"center"}},
+      e("button",{style:{background:"transparent",border:`1px solid ${P.border}`,borderRadius:4,padding:mobile?"12px 24px":"13px 36px",fontFamily:FONT,fontSize:mobile?9:10,fontWeight:600,color:P.cyanSoft,letterSpacing:3,cursor:"pointer",transition:"all .3s"},
+        onMouseEnter:ev=>{ev.currentTarget.style.borderColor=P.cyan;ev.currentTarget.style.boxShadow=`0 0 20px ${P.cyan}15`},
+        onMouseLeave:ev=>{ev.currentTarget.style.borderColor=P.border;ev.currentTarget.style.boxShadow="none"}},
+        "CLOSE FILE / RETURN TO STATION"),
+      e("div",{style:{fontSize:8,color:P.label,letterSpacing:2,marginTop:14,lineHeight:1.8}},
+        "M.I.A. INTELLIGENCE NETWORK — ENV MODULE v4.0",e("br"),
+        "MIAMI-DADE COUNTY · "+(live?"LIVE FEEDS":"BASELINE MODE")+" · 5 MIN REFRESH"))
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(e(App));
+</script>
+</body>
+</html>
