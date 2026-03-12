@@ -64,7 +64,7 @@ function Dot({color=P.cyan,size=6}){
 
 function SectionLabel({children}){
   return e("div",{style:{fontFamily:FONT,fontSize:10,fontWeight:600,color:P.label,letterSpacing:3,textTransform:"uppercase",marginBottom:12,display:"flex",alignItems:"center",gap:8}},
-    e("span",{style:{width:14,height:1,background:P.cyan,display:"inline-block",flexShrink:0}}),children);
+    e("span",{style:{width:14,height:1,background:P.pink,display:"inline-block",flexShrink:0}}),children);
 }
 
 function MetricBox({label,value,unit,sub,color=P.cyan,large=false,mobile=false}){
@@ -244,24 +244,24 @@ function App(){
     // HEADER
     e("div",{style:{...fade(0),borderBottom:`1px solid ${P.border}`,paddingBottom:18,marginBottom:18}},
       e("div",{style:{textAlign:"center",marginBottom:12}},
-        e("span",{style:{fontSize:mobile?7:8,letterSpacing:3,color:P.label}},"CLASSIFIED · M.I.A. INTELLIGENCE NETWORK · DATA SHEET 02")),
+        e("span",{style:{fontSize:mobile?7:8,letterSpacing:3,color:P.pinkSoft}},"CLASSIFIED · M.I.A. INTELLIGENCE NETWORK · DATA SHEET 02")),
 
       mobile?
         e("div",{style:{textAlign:"center"}},
-          e("h1",{style:{fontFamily:FONT,fontSize:15,fontWeight:800,letterSpacing:4,color:P.white,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENV INTEL")),
-          e("div",{style:{fontSize:8,color:P.textSoft,letterSpacing:2,marginTop:4}},"MIAMI-DADE ATMOSPHERIC & TIDAL PULSE"),
+          e("h1",{style:{fontFamily:FONT,fontSize:15,fontWeight:800,letterSpacing:4,color:P.pink,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENV INTEL")),
+          e("div",{style:{fontSize:8,color:P.pinkSoft,letterSpacing:2,marginTop:4}},"MIAMI-DADE ATMOSPHERIC & TIDAL PULSE"),
           e("div",{style:{fontSize:18,fontWeight:700,color:P.cyan,letterSpacing:2,marginTop:8,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})),
           e("div",{style:{fontSize:8,color:P.textSoft,letterSpacing:1}},now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"2-digit",year:"numeric"}).toUpperCase()+" · EST"))
       :
         e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16}},
           e("div",null,
-            e("h1",{style:{fontFamily:FONT,fontSize:18,fontWeight:800,letterSpacing:6,color:P.white,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENVIRONMENTAL INTEL")),
-            e("div",{style:{fontSize:9,color:P.textSoft,letterSpacing:2,marginTop:6}},"MIAMI-DADE ATMOSPHERIC & TIDAL PULSE")),
+            e("h1",{style:{fontFamily:FONT,fontSize:18,fontWeight:800,letterSpacing:6,color:P.pink,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENVIRONMENTAL INTEL")),
+            e("div",{style:{fontSize:9,color:P.pinkSoft,letterSpacing:2,marginTop:6}},"MIAMI-DADE ATMOSPHERIC & TIDAL PULSE")),
           e("div",{style:{textAlign:"right"}},
             e("div",{style:{fontSize:20,fontWeight:700,color:P.cyan,letterSpacing:2,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})),
             e("div",{style:{fontSize:9,color:P.textSoft,letterSpacing:1}},now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"2-digit",year:"numeric"}).toUpperCase()+" · EST"))),
 
-      e("div",{style:{marginTop:14,padding:mobile?"10px 12px":"10px 14px",borderLeft:`2px solid ${P.cyan}44`,background:`${P.panel}cc`,borderRadius:"0 4px 4px 0",fontSize:mobile?9:10,color:P.textSoft,lineHeight:1.8,fontStyle:"italic"}},
+      e("div",{style:{marginTop:14,padding:mobile?"10px 12px":"10px 14px",borderLeft:`2px solid ${P.pink}44`,background:`${P.panel}cc`,borderRadius:"0 4px 4px 0",fontSize:mobile?9:10,color:P.textSoft,lineHeight:1.8,fontStyle:"italic"}},
         "Monitoring rising tides and urban precipitation. Tracking Miami-Dade\u2019s living infrastructure to predict flooding before it hits the grid."),
 
       e("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,padding:mobile?"8px 10px":"8px 14px",background:P.panel,borderRadius:4,border:`1px solid ${P.border}`,flexWrap:"wrap",gap:6}},
@@ -330,7 +330,7 @@ function App(){
         onMouseLeave:ev=>{ev.currentTarget.style.borderColor=P.border;ev.currentTarget.style.boxShadow="none"}},
         "CLOSE FILE / RETURN TO STATION"),
       e("div",{style:{fontSize:8,color:P.label,letterSpacing:2,marginTop:14,lineHeight:1.8}},
-        "M.I.A. INTELLIGENCE NETWORK — ENV MODULE v4.0",e("br"),
+e("span",{style:{color:P.pinkSoft}},        "M.I.A. INTELLIGENCE NETWORK")," — ENV MODULE v4.0",e("br"),
         "MIAMI-DADE COUNTY · "+(live?"LIVE FEEDS":"BASELINE MODE")+" · 5 MIN REFRESH"))
   );
 }
