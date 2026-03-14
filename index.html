@@ -52,6 +52,18 @@ const FALLBACK={
 };
 const dirLabel=d=>["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"][Math.round(d/22.5)%16];
 
+function sunCalc(date){
+  const lat=25.7617,lng=-80.1918,toRad=d=>d*Math.PI/180,toDeg=r=>r*180/Math.PI;
+  const doy=Math.floor((date-new Date(date.getFullYear(),0,0))/86400000);
+  const g=(2*Math.PI/365)*(doy-1);
+  const eq=229.18*(0.000075+0.001868*Math.cos(g)-0.032077*Math.sin(g)-0.014615*Math.cos(2*g)-0.040849*Math.sin(2*g));
+  const dec=0.006918-0.399912*Math.cos(g)+0.070257*Math.sin(g)-0.006758*Math.cos(2*g)+0.000907*Math.sin(2*g)-0.002697*Math.cos(3*g)+0.00148*Math.sin(3*g);
+  const ha=toDeg(Math.acos(Math.max(-1,Math.min(1,-Math.tan(toRad(lat))*Math.tan(dec)))));
+  const off=date.getTimezoneOffset();
+  return{rise:720-4*(lng+ha)-eq-off,set:720-4*(lng-ha)-eq-off};
+}
+function fmtMin(m){const h=Math.floor(m/60),mm=Math.round(m%60),ap=h>=12?"PM":"AM",hh=h>12?h-12:h===0?12:h;return hh+":"+String(mm).padStart(2,"0")+" "+ap}
+
 function useWidth(){
   const[w,setW]=useState(window.innerWidth);
   useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h)},[]);
@@ -180,6 +192,106 @@ function AlertBanner({alerts}){
   );
 }
 
+function FloodRiskGauge({data,mobile}){
+  const d=data;
+  const tidePct=d.waterLevel!=null?Math.min(1,d.waterLevel/FLOOD):0;
+  const tideScore=tidePct*40;
+  const humidScore=d.humidity>85?25:d.humidity>70?15:d.humidity>55?8:3;
+  const pressScore=d.pressure<1005?20:d.pressure<1010?14:d.pressure<1015?8:3;
+  const windScore=d.gust>30?15:d.gust>20?10:d.wind>15?6:2;
+  const s=Math.max(0,Math.min(100,Math.round(tideScore+humidScore+pressScore+windScore)));
+  const label=s>=75?"DANGER":s>=55?"TAKE ACTION":s>=35?"BE PREPARED":s>=18?"STAY ALERT":"LOOKING GOOD";
+  const col=s>=75?P.pink:s>=55?P.pinkSoft:s>=35?P.amber:s>=18?P.cyanSoft:P.green;
+  const desc=s>=75?"Flooding likely \u2014 avoid low areas":s>=55?"Flood conditions developing":s>=35?"Elevated risk \u2014 keep watching":s>=18?"Minor risk \u2014 normal conditions":"No flood concerns right now";
+  const W=200,H=115,cx=100,cy=100,r=72;
+  const ang=t=>Math.PI*(1-t/100);
+  const px=t=>(cx+r*Math.cos(ang(t))).toFixed(1);
+  const py=t=>(cy-r*Math.sin(ang(t))).toFixed(1);
+  const zones=[{f:0,t:20,c:P.green},{f:20,t:40,c:P.cyanSoft},{f:40,t:60,c:P.amber},{f:60,t:80,c:P.pinkSoft},{f:80,t:100,c:P.pink}];
+  const nr=r-18,nx=(cx+nr*Math.cos(ang(s))).toFixed(1),ny=(cy-nr*Math.sin(ang(s))).toFixed(1);
+  return e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"16px":"20px",textAlign:"center"}},
+    e(SectionLabel,null,"Flood Risk"),
+    e("svg",{viewBox:`0 0 ${W} ${H}`,width:"100%",style:{maxWidth:mobile?170:210,display:"block",margin:"0 auto"}},
+      zones.map((z,i)=>e("path",{key:i,d:`M${px(z.f)},${py(z.f)} A${r},${r} 0 0,1 ${px(z.t)},${py(z.t)}`,fill:"none",stroke:z.c,strokeWidth:10,opacity:.2,strokeLinecap:"butt"})),
+      s>1?e("path",{d:`M${px(0)},${py(0)} A${r},${r} 0 ${s>50?1:0},1 ${px(s)},${py(s)}`,fill:"none",stroke:col,strokeWidth:10,strokeLinecap:"round"}):null,
+      e("line",{x1:cx,y1:cy,x2:nx,y2:ny,stroke:P.white,strokeWidth:2,strokeLinecap:"round"}),
+      e("circle",{cx,cy,r:4,fill:col}),
+      e("text",{x:25,y:H,fill:P.label,fontSize:7,fontFamily:FONT,textAnchor:"middle"},"LOW"),
+      e("text",{x:W-25,y:H,fill:P.label,fontSize:7,fontFamily:FONT,textAnchor:"middle"},"HIGH")),
+    e("div",{style:{fontFamily:FONT,fontSize:mobile?30:38,fontWeight:700,color:col,lineHeight:1,marginTop:0}},s),
+    e("div",{style:{fontFamily:FONT,fontSize:mobile?10:12,fontWeight:700,color:col,letterSpacing:2,marginTop:6}},label),
+    e("div",{style:{fontFamily:FONT,fontSize:mobile?9:10,color:P.textSoft,marginTop:8,lineHeight:1.6}},desc));
+}
+
+function SunBar({now,mobile}){
+  const sun=sunCalc(now);
+  const nowMin=now.getHours()*60+now.getMinutes();
+  const dayLen=sun.set-sun.rise;
+  const pct=Math.max(0,Math.min(1,(nowMin-sun.rise)/dayLen));
+  const isDaytime=nowMin>=sun.rise&&nowMin<=sun.set;
+  const remain=isDaytime?Math.round(sun.set-nowMin):0;
+  const remainH=Math.floor(remain/60),remainM=remain%60;
+  const dayH=Math.floor(dayLen/60),dayM=Math.round(dayLen%60);
+  return e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"16px":"20px"}},
+    e(SectionLabel,null,"Daylight"),
+    e("div",{style:{position:"relative",height:mobile?28:32,background:P.bg,borderRadius:16,border:`1px solid ${P.border}`,overflow:"hidden",margin:"8px 0"}},
+      e("div",{style:{position:"absolute",left:0,top:0,bottom:0,width:`${pct*100}%`,background:isDaytime?`linear-gradient(90deg,${P.amber}40,${P.amber}20)`:`${P.dim}15`,borderRadius:16,transition:"width 60s linear"}}),
+      isDaytime?e("div",{style:{position:"absolute",left:`${pct*100}%`,top:"50%",transform:"translate(-50%,-50%)",width:mobile?14:18,height:mobile?14:18,borderRadius:"50%",background:P.amber,boxShadow:`0 0 12px ${P.amber}88,0 0 24px ${P.amber}44`}}):null,
+      !isDaytime?e("div",{style:{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",fontFamily:FONT,fontSize:mobile?8:9,color:P.textSoft,letterSpacing:2}},"NIGHTTIME"):null),
+    e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}},
+      e("div",{style:{textAlign:"left"}},
+        e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1}},"SUNRISE"),
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?13:15,fontWeight:600,color:P.amber}},fmtMin(sun.rise))),
+      e("div",{style:{textAlign:"center"}},
+        e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1}},isDaytime?"REMAINING":"DAYLIGHT"),
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?13:15,fontWeight:600,color:isDaytime?P.cyanSoft:P.textSoft}},isDaytime?`${remainH}h ${remainM}m`:`${dayH}h ${dayM}m`)),
+      e("div",{style:{textAlign:"right"}},
+        e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1}},"SUNSET"),
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?13:15,fontWeight:600,color:P.pinkSoft}},fmtMin(sun.set)))));
+}
+
+function WeekTrend({levels,mobile}){
+  if(!levels||levels.length<24)return null;
+  const step=Math.max(1,Math.floor(levels.length/84));
+  const pts=[];for(let i=0;i<levels.length;i+=step)pts.push(levels[i]);
+  const vals=pts.map(p=>parseFloat(p.v)).filter(v=>!isNaN(v));
+  if(vals.length<10)return null;
+  const maxV=Math.max(...vals,FLOOD+.3),minV=Math.min(...vals,-0.2),range=maxV-minV||1;
+  const W=520,H=70;
+  const coords=vals.map((v,i)=>[(i/(vals.length-1))*W,H-((v-minV)/range)*H]);
+  const pathD=coords.map((p,i)=>`${i===0?"M":"L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const areaD=`M0,${H} ${coords.map(p=>`L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ")} L${W},${H} Z`;
+  const floodY=H-((FLOOD-minV)/range)*H;
+  const q=Math.floor(vals.length/4);
+  const first=vals.slice(0,q),last=vals.slice(-q);
+  const avgF=first.reduce((a,b)=>a+b,0)/first.length,avgL=last.reduce((a,b)=>a+b,0)/last.length;
+  const diff=avgL-avgF;
+  const trend=diff>0.15?"RISING":diff<-0.15?"FALLING":"STABLE";
+  const trendCol=trend==="RISING"?P.pinkSoft:trend==="FALLING"?P.green:P.cyanSoft;
+  const arrow=trend==="RISING"?"\u2191":trend==="FALLING"?"\u2193":"\u2192";
+  const firstDate=new Date(levels[0].t);
+  const dayLabels=[];for(let i=0;i<7;i++){const dd=new Date(firstDate);dd.setDate(dd.getDate()+i);dayLabels.push(dd.toLocaleDateString("en-US",{weekday:"short"}).toUpperCase().slice(0,3))}
+  return e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"16px 14px":"20px 22px"}},
+    e(SectionLabel,null,"7-Day Water Level"),
+    e("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12}},
+      e("span",{style:{fontFamily:FONT,fontSize:mobile?18:22,fontWeight:700,color:trendCol}},arrow),
+      e("span",{style:{fontFamily:FONT,fontSize:mobile?11:12,fontWeight:600,color:trendCol,letterSpacing:1}},trend),
+      e("span",{style:{fontFamily:FONT,fontSize:9,color:P.textSoft}},diff>0?`+${diff.toFixed(2)} ft avg`:`${diff.toFixed(2)} ft avg`)),
+    e("svg",{viewBox:`0 0 ${W} ${H}`,width:"100%",style:{display:"block"}},
+      e("defs",null,e("linearGradient",{id:"wk-fill",x1:0,y1:0,x2:0,y2:1},
+        e("stop",{offset:"0%",stopColor:P.cyan,stopOpacity:.15}),e("stop",{offset:"100%",stopColor:P.cyan,stopOpacity:0}))),
+      e("line",{x1:0,y1:floodY,x2:W,y2:floodY,stroke:P.pink,strokeWidth:.7,strokeDasharray:"4,3",opacity:.5}),
+      e("text",{x:W-4,y:floodY-3,fill:P.pinkSoft,fontSize:7,fontFamily:FONT,textAnchor:"end",opacity:.7},"FLOOD"),
+      e("path",{d:areaD,fill:"url(#wk-fill)"}),
+      e("path",{d:pathD,fill:"none",stroke:P.cyan,strokeWidth:1.2})),
+    e("div",{style:{display:"flex",justifyContent:"space-between",fontFamily:FONT,fontSize:8,color:P.label,marginTop:3}},
+      dayLabels.map((l,i)=>e("span",{key:i},l))),
+    e("div",{style:{fontFamily:FONT,fontSize:mobile?9:10,color:P.textSoft,marginTop:10,lineHeight:1.6}},
+      trend==="RISING"?"Water levels are trending higher this week \u2014 stay alert for flood risk.":
+      trend==="FALLING"?"Water levels are dropping \u2014 flood risk decreasing.":
+      "Water levels are holding steady this week."));
+}
+
 function App(){
   const w=useWidth(),mobile=w<640,tablet=w<860;
   const[now,setNow]=useState(new Date());
@@ -188,6 +300,7 @@ function App(){
   const[live,setLive]=useState(false);
   const[lastSync,setLastSync]=useState(null);
   const[show,setShow]=useState(false);
+  const[weeklyLevels,setWeeklyLevels]=useState([]);
 
   useEffect(()=>{setTimeout(()=>setShow(true),150)},[]);
   useEffect(()=>{const t=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(t)},[]);
@@ -221,6 +334,10 @@ function App(){
     try{const r=await fetch(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${td}&range=24&station=8723170&product=predictions&datum=MLLW&units=english&time_zone=lst_ldt&format=json&interval=h`);
       if(r.ok){const j=await r.json();if(j.predictions?.length)d.hourly=j.predictions}}catch(e){}
 
+    try{const sd=(()=>{const x=new Date();x.setDate(x.getDate()-7);return`${x.getFullYear()}${String(x.getMonth()+1).padStart(2,"0")}${String(x.getDate()).padStart(2,"0")}`})();
+      const r=await fetch(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${sd}&range=168&station=8723170&product=water_level&datum=MLLW&units=english&time_zone=lst_ldt&format=json&interval=h`);
+      if(r.ok){const j=await r.json();if(j.data?.length)setWeeklyLevels(j.data)}}catch(e){}
+
     try{const r=await fetch("https://api.weather.gov/alerts/active?zone=FLZ172",{headers:hdr});
       if(r.ok){const j=await r.json();setAlerts((j.features||[]).map(f=>({event:f.properties?.event,headline:f.properties?.headline})))}}catch(e){}
 
@@ -242,38 +359,27 @@ function App(){
   return e("div",{style:{maxWidth:960,margin:"0 auto",padding:mobile?"12px":"20px 16px",paddingBottom:48}},
 
     // HEADER
-    e("div",{style:{...fade(0),borderBottom:`1px solid ${P.border}`,paddingBottom:18,marginBottom:18}},
-      e("div",{style:{textAlign:"center",marginBottom:12}},
-        e("span",{style:{fontSize:mobile?7:8,letterSpacing:3,color:P.pinkSoft}},"CLASSIFIED · M.I.A. INTELLIGENCE NETWORK · DATA SHEET 02")),
-
+    e("div",{style:{...fade(0),borderBottom:`1px solid ${P.border}`,paddingBottom:14,marginBottom:14}},
       mobile?
         e("div",{style:{textAlign:"center"}},
           e("h1",{style:{fontFamily:FONT,fontSize:15,fontWeight:800,letterSpacing:4,color:P.pink,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENV INTEL")),
-          e("div",{style:{fontSize:8,color:P.pinkSoft,letterSpacing:2,marginTop:4}},"MIAMI-DADE ATMOSPHERIC & TIDAL PULSE"),
-          e("div",{style:{fontSize:18,fontWeight:700,color:P.cyan,letterSpacing:2,marginTop:8,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})),
-          e("div",{style:{fontSize:8,color:P.textSoft,letterSpacing:1}},now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"2-digit",year:"numeric"}).toUpperCase()+" · EST"))
+          e("div",{style:{fontSize:18,fontWeight:700,color:P.cyan,letterSpacing:2,marginTop:8,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})))
       :
-        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16}},
-          e("div",null,
-            e("h1",{style:{fontFamily:FONT,fontSize:18,fontWeight:800,letterSpacing:6,color:P.pink,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENVIRONMENTAL INTEL")),
-            e("div",{style:{fontSize:9,color:P.pinkSoft,letterSpacing:2,marginTop:6}},"MIAMI-DADE ATMOSPHERIC & TIDAL PULSE")),
-          e("div",{style:{textAlign:"right"}},
-            e("div",{style:{fontSize:20,fontWeight:700,color:P.cyan,letterSpacing:2,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})),
-            e("div",{style:{fontSize:9,color:P.textSoft,letterSpacing:1}},now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"2-digit",year:"numeric"}).toUpperCase()+" · EST"))),
+        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16}},
+          e("h1",{style:{fontFamily:FONT,fontSize:18,fontWeight:800,letterSpacing:6,color:P.pink,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENVIRONMENTAL INTEL")),
+          e("div",{style:{fontSize:20,fontWeight:700,color:P.cyan,letterSpacing:2,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}))),
 
-      e("div",{style:{marginTop:14,padding:mobile?"10px 12px":"10px 14px",borderLeft:`2px solid ${P.pink}44`,background:`${P.panel}cc`,borderRadius:"0 4px 4px 0",fontSize:mobile?9:10,color:P.textSoft,lineHeight:1.8,fontStyle:"italic"}},
-        "Monitoring rising tides and urban precipitation. Tracking Miami-Dade\u2019s living infrastructure to predict flooding before it hits the grid."),
-
-      e("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,padding:mobile?"8px 10px":"8px 14px",background:P.panel,borderRadius:4,border:`1px solid ${P.border}`,flexWrap:"wrap",gap:6}},
-        e("div",{style:{display:"flex",alignItems:"center",gap:6}},
-          e(Dot,{color:live?P.green:P.amber,size:5}),
-          e("span",{style:{fontSize:9,color:live?P.green:P.amber,letterSpacing:2,fontWeight:600}},live?"LIVE":"BASELINE")),
-        e("span",{style:{fontSize:8,color:P.label,letterSpacing:1}},
-          (lastSync?"SYNC "+lastSync.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:false}):"SYNCING...")+" · 5m REFRESH"))
+      e("div",{style:{marginTop:10,padding:mobile?"10px 12px":"10px 14px",borderLeft:`2px solid ${P.pink}44`,background:`${P.panel}cc`,borderRadius:"0 4px 4px 0",fontSize:mobile?9:10,color:P.textSoft,lineHeight:1.8,fontStyle:"italic"}},
+        "Monitoring rising tides and urban precipitation. Tracking Miami-Dade\u2019s living infrastructure to predict flooding before it hits the grid.")
     ),
 
+    // FLOOD RISK + DAYLIGHT
+    e("div",{style:{...fade(100),display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr",gap:12,marginBottom:14}},
+      e(FloodRiskGauge,{data:d,mobile}),
+      e(SunBar,{now,mobile})),
+
     // ALERTS
-    e("div",{style:fade(100)},
+    e("div",{style:fade(150)},
       e(AlertBanner,{alerts}),
       alerts.length===0&&lastSync?e("div",{style:{display:"flex",alignItems:"center",gap:8,padding:"9px 14px",background:`${P.green}0a`,border:`1px solid ${P.green}22`,borderRadius:4,marginBottom:14}},
         e(Dot,{color:P.green,size:5}),
@@ -318,6 +424,10 @@ function App(){
         e(WindRose,{deg:d.windDir,speed:d.wind,gust:d.gust,dir:windDirStr,mobile}),
         e("div",{style:{fontFamily:FONT,fontSize:8,color:P.label,marginTop:12,letterSpacing:1}},"SOURCE: NWS KMIA"))),
 
+    // 7-DAY WATER TREND
+    weeklyLevels.length>0?e("div",{style:{...fade(450),marginBottom:16}},
+      e(WeekTrend,{levels:weeklyLevels,mobile})):null,
+
     // FORECAST
     e("div",{style:{...fade(500),marginBottom:24}},
       e(SectionLabel,null,"Extended Forecast"),
@@ -330,7 +440,7 @@ function App(){
         onMouseLeave:ev=>{ev.currentTarget.style.borderColor=P.border;ev.currentTarget.style.boxShadow="none"}},
         "CLOSE FILE / RETURN TO STATION"),
       e("div",{style:{fontSize:8,color:P.label,letterSpacing:2,marginTop:14,lineHeight:1.8}},
-e("span",{style:{color:P.pinkSoft}},        "M.I.A. INTELLIGENCE NETWORK")," — ENV MODULE v4.0",e("br"),
+e("span",{style:{color:P.pinkSoft}},        "M.I.A. INTELLIGENCE NETWORK")," — ENV MODULE v5.0",e("br"),
         "MIAMI-DADE COUNTY · "+(live?"LIVE FEEDS":"BASELINE MODE")+" · 5 MIN REFRESH"))
   );
 }
