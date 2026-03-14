@@ -359,38 +359,27 @@ function App(){
   return e("div",{style:{maxWidth:960,margin:"0 auto",padding:mobile?"12px":"20px 16px",paddingBottom:48}},
 
     // HEADER
-    e("div",{style:{...fade(0),borderBottom:`1px solid ${P.border}`,paddingBottom:18,marginBottom:18}},
-      e("div",{style:{textAlign:"center",marginBottom:12}},
-        e("span",{style:{fontSize:mobile?7:8,letterSpacing:3,color:P.pinkSoft}},"CLASSIFIED · M.I.A. INTELLIGENCE NETWORK · DATA SHEET 02")),
-
+    e("div",{style:{...fade(0),borderBottom:`1px solid ${P.border}`,paddingBottom:14,marginBottom:14}},
       mobile?
         e("div",{style:{textAlign:"center"}},
           e("h1",{style:{fontFamily:FONT,fontSize:15,fontWeight:800,letterSpacing:4,color:P.pink,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENV INTEL")),
-          e("div",{style:{fontSize:8,color:P.pinkSoft,letterSpacing:2,marginTop:4}},"MIAMI-DADE ATMOSPHERIC & TIDAL PULSE"),
-          e("div",{style:{fontSize:18,fontWeight:700,color:P.cyan,letterSpacing:2,marginTop:8,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})),
-          e("div",{style:{fontSize:8,color:P.textSoft,letterSpacing:1}},now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"2-digit",year:"numeric"}).toUpperCase()+" · EST"))
+          e("div",{style:{fontSize:18,fontWeight:700,color:P.cyan,letterSpacing:2,marginTop:8,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})))
       :
-        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16}},
-          e("div",null,
-            e("h1",{style:{fontFamily:FONT,fontSize:18,fontWeight:800,letterSpacing:6,color:P.pink,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENVIRONMENTAL INTEL")),
-            e("div",{style:{fontSize:9,color:P.pinkSoft,letterSpacing:2,marginTop:6}},"MIAMI-DADE ATMOSPHERIC & TIDAL PULSE")),
-          e("div",{style:{textAlign:"right"}},
-            e("div",{style:{fontSize:20,fontWeight:700,color:P.cyan,letterSpacing:2,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})),
-            e("div",{style:{fontSize:9,color:P.textSoft,letterSpacing:1}},now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"2-digit",year:"numeric"}).toUpperCase()+" · EST"))),
+        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16}},
+          e("h1",{style:{fontFamily:FONT,fontSize:18,fontWeight:800,letterSpacing:6,color:P.pink,margin:0}},"M.I.A. ",e("span",{style:{color:P.cyan}},"ENVIRONMENTAL INTEL")),
+          e("div",{style:{fontSize:20,fontWeight:700,color:P.cyan,letterSpacing:2,fontVariantNumeric:"tabular-nums"}},now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}))),
 
-      e("div",{style:{marginTop:14,padding:mobile?"10px 12px":"10px 14px",borderLeft:`2px solid ${P.pink}44`,background:`${P.panel}cc`,borderRadius:"0 4px 4px 0",fontSize:mobile?9:10,color:P.textSoft,lineHeight:1.8,fontStyle:"italic"}},
-        "Monitoring rising tides and urban precipitation. Tracking Miami-Dade\u2019s living infrastructure to predict flooding before it hits the grid."),
-
-      e("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,padding:mobile?"8px 10px":"8px 14px",background:P.panel,borderRadius:4,border:`1px solid ${P.border}`,flexWrap:"wrap",gap:6}},
-        e("div",{style:{display:"flex",alignItems:"center",gap:6}},
-          e(Dot,{color:live?P.green:P.amber,size:5}),
-          e("span",{style:{fontSize:9,color:live?P.green:P.amber,letterSpacing:2,fontWeight:600}},live?"LIVE":"BASELINE")),
-        e("span",{style:{fontSize:8,color:P.label,letterSpacing:1}},
-          (lastSync?"SYNC "+lastSync.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:false}):"SYNCING...")+" · 5m REFRESH"))
+      e("div",{style:{marginTop:10,padding:mobile?"10px 12px":"10px 14px",borderLeft:`2px solid ${P.pink}44`,background:`${P.panel}cc`,borderRadius:"0 4px 4px 0",fontSize:mobile?9:10,color:P.textSoft,lineHeight:1.8,fontStyle:"italic"}},
+        "Monitoring rising tides and urban precipitation. Tracking Miami-Dade\u2019s living infrastructure to predict flooding before it hits the grid.")
     ),
 
+    // FLOOD RISK + DAYLIGHT
+    e("div",{style:{...fade(100),display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr",gap:12,marginBottom:14}},
+      e(FloodRiskGauge,{data:d,mobile}),
+      e(SunBar,{now,mobile})),
+
     // ALERTS
-    e("div",{style:fade(100)},
+    e("div",{style:fade(150)},
       e(AlertBanner,{alerts}),
       alerts.length===0&&lastSync?e("div",{style:{display:"flex",alignItems:"center",gap:8,padding:"9px 14px",background:`${P.green}0a`,border:`1px solid ${P.green}22`,borderRadius:4,marginBottom:14}},
         e(Dot,{color:P.green,size:5}),
@@ -413,11 +402,6 @@ function App(){
         e(MetricBox,{label:"VISIBILITY",value:d.visibility,unit:"mi",mobile,color:P.cyanSoft}),
         e(MetricBox,{label:"HEAT INDEX",value:d.heatIdx,unit:"°F",mobile,color:d.heatIdx>100?P.pinkSoft:P.cyanSoft}),
         e(MetricBox,{label:"WIND GUST",value:d.gust,unit:"mph",mobile,color:d.gust>25?P.pinkSoft:P.cyanSoft}))),
-
-    // FLOOD RISK + DAYLIGHT
-    e("div",{style:{...fade(350),display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr",gap:12,marginBottom:16}},
-      e(FloodRiskGauge,{data:d,mobile}),
-      e(SunBar,{now,mobile})),
 
     // TIDE + WIND
     e("div",{style:{...fade(400),display:"grid",gridTemplateColumns:mobile?"1fr":tablet?"1fr":"1fr 240px",gap:12,marginBottom:16}},
