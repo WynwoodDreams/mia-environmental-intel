@@ -147,23 +147,111 @@ function TideCurve({hourly,hilo}){
   );
 }
 
-function WindRose({deg,speed,gust,dir,mobile}){
-  const sz=mobile?100:120,cx=sz/2;
-  const cardinals=[["N",cx,8],["E",sz-7,cx+1],["S",cx,sz-5],["W",7,cx+1]];
-  return e("div",{style:{textAlign:"center"}},
-    e("svg",{viewBox:`0 0 ${sz} ${sz}`,width:sz,height:sz,style:{margin:"0 auto",display:"block"}},
-      e("circle",{cx,cy:cx,r:cx-6,fill:"none",stroke:P.border,strokeWidth:.7}),
-      e("circle",{cx,cy:cx,r:cx-20,fill:"none",stroke:P.border,strokeWidth:.5,strokeDasharray:"2,3"}),
-      cardinals.map(([l,x,y])=>e("text",{key:l,x,y,fill:P.textSoft,fontSize:8,fontFamily:FONT,textAnchor:"middle",dominantBaseline:"middle",fontWeight:600},l)),
+function WindPanel({deg,speed,gust,dir,mobile}){
+  const sz=mobile?70:84,cx=sz/2;
+  const cardinals=[["N",cx,7],["E",sz-5,cx+1],["S",cx,sz-4],["W",5,cx+1]];
+  return e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"14px":"18px 20px",display:"flex",alignItems:"center",gap:mobile?16:24}},
+    e("svg",{viewBox:`0 0 ${sz} ${sz}`,width:sz,height:sz,style:{flexShrink:0}},
+      e("circle",{cx,cy:cx,r:cx-5,fill:"none",stroke:P.border,strokeWidth:.6}),
+      e("circle",{cx,cy:cx,r:cx-16,fill:"none",stroke:P.border,strokeWidth:.4,strokeDasharray:"2,3"}),
+      cardinals.map(([l,x,y])=>e("text",{key:l,x,y,fill:P.textSoft,fontSize:7,fontFamily:FONT,textAnchor:"middle",dominantBaseline:"middle",fontWeight:600},l)),
       deg!=null?e("g",{transform:`rotate(${deg},${cx},${cx})`},
-        e("line",{x1:cx,y1:cx,x2:cx,y2:14,stroke:P.cyan,strokeWidth:2,strokeLinecap:"round"}),
-        e("polygon",{points:`${cx},11 ${cx-4},21 ${cx+4},21`,fill:P.cyan})):null,
-      e("circle",{cx,cy:cx,r:3,fill:P.cyan})
+        e("line",{x1:cx,y1:cx,x2:cx,y2:12,stroke:P.cyan,strokeWidth:1.8,strokeLinecap:"round"}),
+        e("polygon",{points:`${cx},9 ${cx-3.5},17 ${cx+3.5},17`,fill:P.cyan})):null,
+      e("circle",{cx,cy:cx,r:2.5,fill:P.cyan})
     ),
-    e("div",{style:{fontFamily:FONT,fontSize:mobile?22:28,fontWeight:700,color:P.white,marginTop:10}},
-      speed!=null?speed:"—",e("span",{style:{fontSize:11,color:P.textSoft,fontWeight:400}}," mph")),
-    dir?e("div",{style:{display:"inline-block",fontFamily:FONT,fontSize:11,fontWeight:600,color:P.pinkSoft,border:`1px solid ${P.pink}44`,borderRadius:3,padding:"2px 10px",marginTop:6}},dir):null,
-    gust!=null?e("div",{style:{fontFamily:FONT,fontSize:9,color:P.textSoft,marginTop:6}},"Gusts to ",e("span",{style:{color:gust>25?P.pinkSoft:P.amber,fontWeight:600}},gust+" mph")):null
+    e("div",{style:{display:"flex",flexDirection:"column",gap:4}},
+      e("div",{style:{fontFamily:FONT,fontSize:8,color:P.label,letterSpacing:2}},"WIND"),
+      e("div",{style:{display:"flex",alignItems:"baseline",gap:5}},
+        e("span",{style:{fontFamily:FONT,fontSize:mobile?24:30,fontWeight:700,color:P.white,lineHeight:1}},speed!=null?speed:"—"),
+        e("span",{style:{fontFamily:FONT,fontSize:11,color:P.textSoft,fontWeight:400}},"mph")),
+      e("div",{style:{display:"flex",alignItems:"center",gap:8,marginTop:2}},
+        dir?e("span",{style:{fontFamily:FONT,fontSize:11,fontWeight:600,color:P.pinkSoft,border:`1px solid ${P.pink}33`,borderRadius:3,padding:"1px 7px"}},dir):null,
+        gust!=null?e("span",{style:{fontFamily:FONT,fontSize:9,color:P.textSoft}},"Gusts ",e("span",{style:{color:gust>25?P.pinkSoft:P.amber,fontWeight:600}},gust+" mph")):null))
+  );
+}
+
+function TropicalRecon({mobile}){
+  const[outlook,setOutlook]=useState(null);
+  const[tropAlerts,setTropAlerts]=useState([]);
+  const[loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    const hdr={"User-Agent":"(MIA-Intel,contact@mia.dev)"};
+    (async()=>{
+      // Fetch tropical weather outlook
+      try{
+        const r=await fetch("https://api.weather.gov/products?type=TWO&limit=1",{headers:hdr});
+        if(r.ok){const j=await r.json();
+          if(j["@graph"]?.[0]?.["@id"]){
+            const r2=await fetch(j["@graph"][0]["@id"],{headers:hdr});
+            if(r2.ok){const j2=await r2.json();
+              const txt=j2.productText||"";
+              // Parse outlook for key info
+              const hasActive=/Tropical (Storm|Depression|Cyclone|Hurricane)/i.test(txt);
+              const formChance=/formation chance.{0,30}(\d+)\s*percent/i.exec(txt);
+              const disturbances=(txt.match(/\d+\.\s/g)||[]).length;
+              const issuedMatch=/(\d{3,4}\s*(AM|PM)\s*\w+\s+\w+\s+\w+\s+\d+\s+\d{4})/i.exec(txt);
+              setOutlook({hasActive,disturbances,formChance:formChance?parseInt(formChance[1]):null,issued:issuedMatch?issuedMatch[1]:null,raw:txt.slice(0,600)})}}}}catch(e){}
+
+      // Fetch tropical-related alerts for FL
+      try{
+        const r=await fetch("https://api.weather.gov/alerts/active?area=FL",{headers:hdr});
+        if(r.ok){const j=await r.json();
+          const trop=(j.features||[]).filter(f=>{
+            const ev=(f.properties?.event||"").toLowerCase();
+            return ev.includes("hurricane")||ev.includes("tropical")||ev.includes("storm surge");
+          }).map(f=>({event:f.properties?.event,headline:f.properties?.headline,severity:f.properties?.severity}));
+          setTropAlerts(trop)}}catch(e){}
+
+      setLoading(false);
+    })();
+  },[]);
+
+  const now=new Date(),month=now.getMonth();
+  const inSeason=month>=5&&month<=10; // June-November
+  const hasThreats=tropAlerts.length>0;
+  const threatLevel=hasThreats?"ACTIVE":outlook?.hasActive?"TRACKING":outlook?.disturbances>0?"MONITORING":"ALL CLEAR";
+  const threatCol=hasThreats?P.pink:outlook?.hasActive?P.pinkSoft:outlook?.disturbances>0?P.amber:P.green;
+
+  return e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"16px 14px":"20px 22px"}},
+    e(SectionLabel,null,"Tropical Recon"),
+
+    // Status bar
+    e("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:14}},
+      e(Dot,{color:threatCol,size:7}),
+      e("span",{style:{fontFamily:FONT,fontSize:mobile?12:14,fontWeight:700,color:threatCol,letterSpacing:2}},threatLevel),
+      e("span",{style:{fontFamily:FONT,fontSize:9,color:P.textSoft}},inSeason?"HURRICANE SEASON ACTIVE":"OFF-SEASON")),
+
+    // Threat indicators
+    e("div",{style:{display:"grid",gridTemplateColumns:mobile?"1fr 1fr":"repeat(4,1fr)",gap:mobile?6:8,marginBottom:14}},
+      e("div",{style:{background:P.bg,border:`1px solid ${P.border}`,borderRadius:4,padding:mobile?"8px":"10px 12px",textAlign:"center"}},
+        e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1.5}},"BASIN STATUS"),
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?12:14,fontWeight:700,color:threatCol,marginTop:4}},hasThreats?"THREAT":outlook?.hasActive?"ACTIVE":"QUIET")),
+      e("div",{style:{background:P.bg,border:`1px solid ${P.border}`,borderRadius:4,padding:mobile?"8px":"10px 12px",textAlign:"center"}},
+        e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1.5}},"DISTURBANCES"),
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?12:14,fontWeight:700,color:outlook?.disturbances>0?P.amber:P.cyanSoft,marginTop:4}},outlook?.disturbances||0)),
+      e("div",{style:{background:P.bg,border:`1px solid ${P.border}`,borderRadius:4,padding:mobile?"8px":"10px 12px",textAlign:"center"}},
+        e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1.5}},"FL ALERTS"),
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?12:14,fontWeight:700,color:tropAlerts.length>0?P.pink:P.green,marginTop:4}},tropAlerts.length)),
+      e("div",{style:{background:P.bg,border:`1px solid ${P.border}`,borderRadius:4,padding:mobile?"8px":"10px 12px",textAlign:"center"}},
+        e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1.5}},"SEASON"),
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?12:14,fontWeight:700,color:inSeason?P.amber:P.cyanSoft,marginTop:4}},inSeason?"JUN-NOV":"OFF"))),
+
+    // Active alerts
+    tropAlerts.length>0?e("div",{style:{background:`${P.pink}08`,border:`1px solid ${P.pink}33`,borderRadius:4,padding:"12px 14px",marginBottom:12}},
+      tropAlerts.slice(0,3).map((a,i)=>e("div",{key:i,style:{fontFamily:FONT,fontSize:mobile?9:10,color:P.text,lineHeight:1.6,borderLeft:`2px solid ${P.pink}66`,paddingLeft:10,marginTop:i?8:0}},
+        e("span",{style:{color:P.pinkSoft,fontWeight:700}},a.event),
+        a.headline?" — "+a.headline:null))):null,
+
+    // Outlook text
+    loading?e("div",{style:{fontFamily:FONT,fontSize:9,color:P.textSoft,fontStyle:"italic"}},"Fetching NHC outlook..."):
+    outlook?e("div",{style:{fontFamily:FONT,fontSize:mobile?8:9,color:P.textSoft,lineHeight:1.7,borderLeft:`2px solid ${P.border}`,paddingLeft:12,maxHeight:80,overflow:"hidden"}},
+      outlook.issued?e("div",{style:{fontSize:8,color:P.label,letterSpacing:1,marginBottom:6}},"NHC OUTLOOK · "+outlook.issued):null,
+      outlook.raw.replace(/\n{2,}/g,"\n").slice(0,300)+(outlook.raw.length>300?"...":"")):
+    e("div",{style:{fontFamily:FONT,fontSize:9,color:P.textSoft}},"No outlook data available"),
+
+    e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1.5,marginTop:12,textAlign:"right"}},"SOURCE: NOAA NHC · NWS")
   );
 }
 
@@ -403,8 +491,9 @@ function App(){
         e(MetricBox,{label:"HEAT INDEX",value:d.heatIdx,unit:"°F",mobile,color:d.heatIdx>100?P.pinkSoft:P.cyanSoft}),
         e(MetricBox,{label:"WIND GUST",value:d.gust,unit:"mph",mobile,color:d.gust>25?P.pinkSoft:P.cyanSoft}))),
 
-    // TIDE + WIND
-    e("div",{style:{...fade(400),display:"grid",gridTemplateColumns:mobile?"1fr":tablet?"1fr":"1fr 240px",gap:12,marginBottom:16}},
+    // TIDE + WIND row
+    e("div",{style:{...fade(400),display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr",gap:12,marginBottom:16}},
+      // Left: Tide Gauge + Next Tides
       e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"16px 14px":"20px 22px"}},
         e(SectionLabel,null,"Tide Gauge"),
         e(TideGauge,{level:d.waterLevel,mobile}),
@@ -415,32 +504,36 @@ function App(){
               const hi=p.type==="H",t=new Date(p.t);
               return e("div",{key:i,style:{background:P.bg,border:`1px solid ${hi?P.cyan:P.pink}33`,borderRadius:4,padding:mobile?"5px 8px":"6px 12px",textAlign:"center"}},
                 e("div",{style:{fontSize:mobile?11:13,fontWeight:700,color:hi?P.cyanSoft:P.pinkSoft}},parseFloat(p.v).toFixed(2)+"'"),
-                e("div",{style:{fontSize:7,color:P.textSoft,marginTop:2}},(hi?"HIGH":"LOW")+" · "+t.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true})))}))):null,
-        e("div",{style:{marginTop:16}},
+                e("div",{style:{fontSize:7,color:P.textSoft,marginTop:2}},(hi?"HIGH":"LOW")+" · "+t.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true})))}))):null),
+      // Right: Wind Panel
+      e("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+        e(WindPanel,{deg:d.windDir,speed:d.wind,gust:d.gust,dir:windDirStr,mobile}),
+        // 24H Tide Curve below wind
+        e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"14px":"18px 20px",flex:1}},
           e("div",{style:{fontSize:9,color:P.label,letterSpacing:2,marginBottom:8}},"24H TIDE CURVE"),
-          e(TideCurve,{hourly:d.hourly,hilo:d.hilo}))),
-      e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"16px":"20px 16px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}},
-        e(SectionLabel,null,"Wind Vector"),
-        e(WindRose,{deg:d.windDir,speed:d.wind,gust:d.gust,dir:windDirStr,mobile}),
-        e("div",{style:{fontFamily:FONT,fontSize:8,color:P.label,marginTop:12,letterSpacing:1}},"SOURCE: NWS KMIA"))),
+          e(TideCurve,{hourly:d.hourly,hilo:d.hilo})))),
+
+    // TROPICAL RECON
+    e("div",{style:{...fade(450),marginBottom:16}},
+      e(TropicalRecon,{mobile})),
 
     // 7-DAY WATER TREND
-    weeklyLevels.length>0?e("div",{style:{...fade(450),marginBottom:16}},
+    weeklyLevels.length>0?e("div",{style:{...fade(500),marginBottom:16}},
       e(WeekTrend,{levels:weeklyLevels,mobile})):null,
 
     // FORECAST
-    e("div",{style:{...fade(500),marginBottom:24}},
+    e("div",{style:{...fade(550),marginBottom:24}},
       e(SectionLabel,null,"Extended Forecast"),
       e(ForecastRow,{items:d.forecast,mobile})),
 
     // FOOTER
-    e("div",{style:{...fade(600),borderTop:`1px solid ${P.border}`,paddingTop:20,textAlign:"center"}},
+    e("div",{style:{...fade(650),borderTop:`1px solid ${P.border}`,paddingTop:20,textAlign:"center"}},
       e("button",{style:{background:"transparent",border:`1px solid ${P.border}`,borderRadius:4,padding:mobile?"12px 24px":"13px 36px",fontFamily:FONT,fontSize:mobile?9:10,fontWeight:600,color:P.cyanSoft,letterSpacing:3,cursor:"pointer",transition:"all .3s"},
         onMouseEnter:ev=>{ev.currentTarget.style.borderColor=P.cyan;ev.currentTarget.style.boxShadow=`0 0 20px ${P.cyan}15`},
         onMouseLeave:ev=>{ev.currentTarget.style.borderColor=P.border;ev.currentTarget.style.boxShadow="none"}},
         "CLOSE FILE / RETURN TO STATION"),
       e("div",{style:{fontSize:8,color:P.label,letterSpacing:2,marginTop:14,lineHeight:1.8}},
-e("span",{style:{color:P.pinkSoft}},        "M.I.A. INTELLIGENCE NETWORK")," — ENV MODULE v5.0",e("br"),
+e("span",{style:{color:P.pinkSoft}},        "M.I.A. INTELLIGENCE NETWORK")," — ENV MODULE v6.0",e("br"),
         "MIAMI-DADE COUNTY · "+(live?"LIVE FEEDS":"BASELINE MODE")+" · 5 MIN REFRESH"))
   );
 }
