@@ -320,6 +320,9 @@ function SunBar({now,mobile}){
   const remain=isDaytime?Math.round(sun.set-nowMin):0;
   const remainH=Math.floor(remain/60),remainM=remain%60;
   const dayH=Math.floor(dayLen/60),dayM=Math.round(dayLen%60);
+  const solarNoon=(sun.rise+sun.set)/2;
+  const goldenH=sun.set-60; // ~1hr before sunset
+  const goldenEnd=sun.set-20;
   return e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"16px":"20px"}},
     e(SectionLabel,null,"Daylight"),
     e("div",{style:{position:"relative",height:mobile?28:32,background:P.bg,borderRadius:16,border:`1px solid ${P.border}`,overflow:"hidden",margin:"8px 0"}},
@@ -335,7 +338,18 @@ function SunBar({now,mobile}){
         e("div",{style:{fontFamily:FONT,fontSize:mobile?13:15,fontWeight:600,color:isDaytime?P.cyanSoft:P.textSoft}},isDaytime?`${remainH}h ${remainM}m`:`${dayH}h ${dayM}m`)),
       e("div",{style:{textAlign:"right"}},
         e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1}},"SUNSET"),
-        e("div",{style:{fontFamily:FONT,fontSize:mobile?13:15,fontWeight:600,color:P.pinkSoft}},fmtMin(sun.set)))));
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?13:15,fontWeight:600,color:P.pinkSoft}},fmtMin(sun.set)))),
+    // Extra daylight stats
+    e("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:mobile?6:8,marginTop:12}},
+      e("div",{style:{background:P.bg,border:`1px solid ${P.border}`,borderRadius:4,padding:mobile?"6px":"8px 10px",textAlign:"center"}},
+        e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1}},"DAY LENGTH"),
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?11:13,fontWeight:600,color:P.cyanSoft,marginTop:3}},`${dayH}h ${dayM}m`)),
+      e("div",{style:{background:P.bg,border:`1px solid ${P.border}`,borderRadius:4,padding:mobile?"6px":"8px 10px",textAlign:"center"}},
+        e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1}},"SOLAR NOON"),
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?11:13,fontWeight:600,color:P.amber,marginTop:3}},fmtMin(solarNoon))),
+      e("div",{style:{background:P.bg,border:`1px solid ${P.border}`,borderRadius:4,padding:mobile?"6px":"8px 10px",textAlign:"center"}},
+        e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1}},"GOLDEN HOUR"),
+        e("div",{style:{fontFamily:FONT,fontSize:mobile?11:13,fontWeight:600,color:P.amber,marginTop:3}},fmtMin(goldenH)))));
 }
 
 function WeekTrend({levels,mobile}){
@@ -491,6 +505,10 @@ function App(){
         e(MetricBox,{label:"HEAT INDEX",value:d.heatIdx,unit:"°F",mobile,color:d.heatIdx>100?P.pinkSoft:P.cyanSoft}),
         e(MetricBox,{label:"WIND GUST",value:d.gust,unit:"mph",mobile,color:d.gust>25?P.pinkSoft:P.cyanSoft}))),
 
+    // TROPICAL RECON
+    e("div",{style:{...fade(350),marginBottom:16}},
+      e(TropicalRecon,{mobile})),
+
     // TIDE + WIND row
     e("div",{style:{...fade(400),display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr",gap:12,marginBottom:16}},
       // Left: Tide Gauge + Next Tides
@@ -512,10 +530,6 @@ function App(){
         e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"14px":"18px 20px",flex:1}},
           e("div",{style:{fontSize:9,color:P.label,letterSpacing:2,marginBottom:8}},"24H TIDE CURVE"),
           e(TideCurve,{hourly:d.hourly,hilo:d.hilo})))),
-
-    // TROPICAL RECON
-    e("div",{style:{...fade(450),marginBottom:16}},
-      e(TropicalRecon,{mobile})),
 
     // 7-DAY WATER TREND
     weeklyLevels.length>0?e("div",{style:{...fade(500),marginBottom:16}},
