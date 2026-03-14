@@ -147,28 +147,24 @@ function TideCurve({hourly,hilo}){
   );
 }
 
-function WindStrip({deg,speed,gust,dir,mobile}){
-  const sz=44,cx=sz/2;
-  return e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"10px 14px":"12px 18px",display:"flex",alignItems:"center",gap:mobile?12:20,flexWrap:"wrap"}},
-    e("svg",{viewBox:`0 0 ${sz} ${sz}`,width:sz,height:sz,style:{flexShrink:0}},
-      e("circle",{cx,cy:cx,r:cx-3,fill:"none",stroke:P.border,strokeWidth:.6}),
-      ["N","E","S","W"].forEach?null:null,
-      e("text",{x:cx,y:5,fill:P.label,fontSize:6,fontFamily:FONT,textAnchor:"middle"},"N"),
-      e("text",{x:sz-3,y:cx+2,fill:P.label,fontSize:6,fontFamily:FONT,textAnchor:"middle"},"E"),
-      e("text",{x:cx,y:sz-1,fill:P.label,fontSize:6,fontFamily:FONT,textAnchor:"middle"},"S"),
-      e("text",{x:3,y:cx+2,fill:P.label,fontSize:6,fontFamily:FONT,textAnchor:"middle"},"W"),
-      deg!=null?e("g",{transform:`rotate(${deg},${cx},${cx})`},
-        e("line",{x1:cx,y1:cx,x2:cx,y2:7,stroke:P.cyan,strokeWidth:1.5,strokeLinecap:"round"}),
-        e("polygon",{points:`${cx},6 ${cx-2.5},12 ${cx+2.5},12`,fill:P.cyan})):null,
-      e("circle",{cx,cy:cx,r:2,fill:P.cyan})
-    ),
-    e("div",{style:{display:"flex",alignItems:"baseline",gap:6}},
-      e("span",{style:{fontFamily:FONT,fontSize:mobile?18:22,fontWeight:700,color:P.white}},speed!=null?speed:"—"),
-      e("span",{style:{fontFamily:FONT,fontSize:9,color:P.textSoft}},"mph")),
-    dir?e("div",{style:{fontFamily:FONT,fontSize:10,fontWeight:600,color:P.pinkSoft,border:`1px solid ${P.pink}33`,borderRadius:3,padding:"2px 8px"}},dir):null,
-    gust!=null?e("div",{style:{fontFamily:FONT,fontSize:9,color:P.textSoft}},"Gusts ",e("span",{style:{color:gust>25?P.pinkSoft:P.amber,fontWeight:600}},gust),e("span",{style:{color:P.label}}," mph")):null,
-    e("div",{style:{fontFamily:FONT,fontSize:7,color:P.label,letterSpacing:1,marginLeft:"auto"}},"NWS KMIA")
-  );
+function WindMetricBox({speed,gust,dir,deg,mobile}){
+  const sz=24,cx=sz/2;
+  return e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"12px 14px":"14px 16px",display:"flex",flexDirection:"column",gap:4}},
+    e("div",{style:{fontFamily:FONT,fontSize:mobile?8:9,color:P.label,letterSpacing:2,display:"flex",alignItems:"center",gap:6}},
+      "WIND",
+      e("svg",{viewBox:`0 0 ${sz} ${sz}`,width:sz,height:sz,style:{flexShrink:0}},
+        e("circle",{cx,cy:cx,r:cx-2,fill:"none",stroke:P.border,strokeWidth:.5}),
+        deg!=null?e("g",{transform:`rotate(${deg},${cx},${cx})`},
+          e("line",{x1:cx,y1:cx,x2:cx,y2:4,stroke:P.cyan,strokeWidth:1.2,strokeLinecap:"round"}),
+          e("polygon",{points:`${cx},3 ${cx-2},7 ${cx+2},7`,fill:P.cyan})):null,
+        e("circle",{cx,cy:cx,r:1.5,fill:P.cyan}))),
+    e("div",{style:{fontFamily:FONT,fontSize:mobile?18:22,fontWeight:700,color:P.white,lineHeight:1,marginTop:2}},
+      speed!=null?speed:"—",
+      e("span",{style:{fontSize:mobile?9:11,color:P.textSoft,fontWeight:400,marginLeft:3}},"mph")),
+    e("div",{style:{fontFamily:FONT,fontSize:mobile?8:9,color:P.textSoft,lineHeight:1.5,marginTop:2}},
+      dir?e("span",{style:{color:P.pinkSoft,fontWeight:600}},dir):null,
+      dir&&gust!=null?" · ":null,
+      gust!=null?["G ",e("span",{key:"g",style:{color:gust>25?P.pinkSoft:P.amber,fontWeight:600}},gust+" mph")]:null));
 }
 
 function TropicalRecon({mobile}){
@@ -482,35 +478,36 @@ function App(){
         e(MetricBox,{label:"CURRENT TIDE",value:d.waterLevel?.toFixed(2),unit:"ft",large:true,mobile,sub:"MLLW · Stn 8723170",color:d.waterLevel>=FLOOD*.75?P.amber:P.cyanSoft}),
         e(MetricBox,{label:"PRECIP RISK",value:precipRisk,unit:"",large:true,mobile,sub:`RH ${d.humidity}% · Dew ${d.dewpoint}°F`,color:precipCol}))),
 
-    // SECONDARY
+    // SECONDARY + WIND
     e("div",{style:fade(300)},
-      e("div",{style:{display:"grid",gridTemplateColumns:mobile?"repeat(3,1fr)":tablet?"repeat(3,1fr)":"repeat(5,1fr)",gap:mobile?6:8,marginBottom:16}},
+      e("div",{style:{display:"grid",gridTemplateColumns:mobile?"repeat(3,1fr)":tablet?"repeat(3,1fr)":"repeat(6,1fr)",gap:mobile?6:8,marginBottom:16}},
         e(MetricBox,{label:"HUMIDITY",value:d.humidity,unit:"%",mobile,color:P.cyanSoft}),
         e(MetricBox,{label:"DEW POINT",value:d.dewpoint,unit:"°F",mobile,color:P.cyanSoft}),
         e(MetricBox,{label:"VISIBILITY",value:d.visibility,unit:"mi",mobile,color:P.cyanSoft}),
         e(MetricBox,{label:"HEAT INDEX",value:d.heatIdx,unit:"°F",mobile,color:d.heatIdx>100?P.pinkSoft:P.cyanSoft}),
-        e(MetricBox,{label:"WIND GUST",value:d.gust,unit:"mph",mobile,color:d.gust>25?P.pinkSoft:P.cyanSoft}))),
+        e(MetricBox,{label:"WIND GUST",value:d.gust,unit:"mph",mobile,color:d.gust>25?P.pinkSoft:P.cyanSoft}),
+        e(WindMetricBox,{speed:d.wind,gust:d.gust,dir:windDirStr,deg:d.windDir,mobile}))),
 
-    // WIND STRIP
-    e("div",{style:{...fade(350),marginBottom:14}},
-      e(WindStrip,{deg:d.windDir,speed:d.wind,gust:d.gust,dir:windDirStr,mobile})),
-
-    // TIDE GAUGE
+    // TIDE GAUGE — 2-column layout
     e("div",{style:{...fade(400),marginBottom:16}},
       e("div",{style:{background:P.panel,border:`1px solid ${P.border}`,borderRadius:6,padding:mobile?"16px 14px":"20px 22px"}},
         e(SectionLabel,null,"Tide Gauge"),
-        e(TideGauge,{level:d.waterLevel,mobile}),
-        d.hilo.length>0?e("div",{style:{marginTop:16}},
-          e("div",{style:{fontSize:9,color:P.label,letterSpacing:2,marginBottom:8}},"NEXT TIDES"),
-          e("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
-            d.hilo.slice(0,4).map((p,i)=>{
-              const hi=p.type==="H",t=new Date(p.t);
-              return e("div",{key:i,style:{background:P.bg,border:`1px solid ${hi?P.cyan:P.pink}33`,borderRadius:4,padding:mobile?"5px 8px":"6px 12px",textAlign:"center"}},
-                e("div",{style:{fontSize:mobile?11:13,fontWeight:700,color:hi?P.cyanSoft:P.pinkSoft}},parseFloat(p.v).toFixed(2)+"'"),
-                e("div",{style:{fontSize:7,color:P.textSoft,marginTop:2}},(hi?"HIGH":"LOW")+" · "+t.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true})))}))):null,
-        e("div",{style:{marginTop:16}},
-          e("div",{style:{fontSize:9,color:P.label,letterSpacing:2,marginBottom:8}},"24H TIDE CURVE"),
-          e(TideCurve,{hourly:d.hourly,hilo:d.hilo})))),
+        e("div",{style:{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr",gap:mobile?16:24}},
+          // Left: gauge + reading
+          e("div",null,
+            e(TideGauge,{level:d.waterLevel,mobile}),
+            d.hilo.length>0?e("div",{style:{marginTop:16}},
+              e("div",{style:{fontSize:9,color:P.label,letterSpacing:2,marginBottom:8}},"NEXT TIDES"),
+              e("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+                d.hilo.slice(0,4).map((p,i)=>{
+                  const hi=p.type==="H",t=new Date(p.t);
+                  return e("div",{key:i,style:{background:P.bg,border:`1px solid ${hi?P.cyan:P.pink}33`,borderRadius:4,padding:mobile?"5px 8px":"6px 12px",textAlign:"center"}},
+                    e("div",{style:{fontSize:mobile?11:13,fontWeight:700,color:hi?P.cyanSoft:P.pinkSoft}},parseFloat(p.v).toFixed(2)+"'"),
+                    e("div",{style:{fontSize:7,color:P.textSoft,marginTop:2}},(hi?"HIGH":"LOW")+" · "+t.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true})))}))):null),
+          // Right: 24h tide curve
+          e("div",{style:{display:"flex",flexDirection:"column",justifyContent:"center"}},
+            e("div",{style:{fontSize:9,color:P.label,letterSpacing:2,marginBottom:8}},"24H TIDE CURVE"),
+            e(TideCurve,{hourly:d.hourly,hilo:d.hilo}))))),
 
     // TROPICAL RECON
     e("div",{style:{...fade(450),marginBottom:16}},
